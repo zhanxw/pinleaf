@@ -1,0 +1,100 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional release tag to publish (leave empty for build-only artifact)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  macos-release:
+    name: Build Universal macOS App & Release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (arm64 + x86_64)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+            SHOULD_RELEASE="true"
+          elif [[ -n "${INPUT_TAG}" ]]; then
+            TAG="${INPUT_TAG}"
+            SHOULD_RELEASE="true"
+          else
+            TAG="dev-${GITHUB_SHA::7}"
+            SHOULD_RELEASE="false"
+          fi
+
+          if [[ "$TAG" == v* ]]; then
+            VERSION="${TAG#v}"
+          else
+            VERSION="0.1.0"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Run workspace unit tests
+        run: cargo test --locked --workspace
+
+      - name: Build Universal macOS bundle and DMG
+        run: bash scripts/package_macos.sh --universal --no-install --version "${{ steps.meta.outputs.version }}"
+
+      - name: Verify Universal binary, codesign, and self-test
+        run: |
+          ARCHS="$(/usr/bin/lipo -archs dist/Pinleaf.app/Contents/MacOS/pinleaf)"
+          echo "Universal binary architectures: $ARCHS"
+          [[ "$ARCHS" == *"arm64"* && "$ARCHS" == *"x86_64"* ]]
+          /usr/bin/codesign --verify --deep --strict --verbose=2 dist/Pinleaf.app
+          ./dist/Pinleaf.app/Contents/MacOS/pinleaf --self-test
+
+      - name: Prepare named release archives and checksums
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          mkdir -p dist/release
+          cp dist/Pinleaf.dmg "dist/release/Pinleaf-${TAG}-macos-universal.dmg"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent dist/Pinleaf.app "dist/release/Pinleaf-${TAG}-macos-universal.app.zip"
+          (cd dist/release && shasum -a 256 Pinleaf-* > SHA256SUMS.txt)
+          ls -lh dist/release/
+          cat dist/release/SHA256SUMS.txt
+
+      - name: Upload workflow build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinleaf-${{ steps.meta.outputs.tag }}-macos-universal
+          path: dist/release/*
+
+      - name: Publish GitHub Release
+        if: steps.meta.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/release/* --clobber
+          else
+            gh release create "$TAG" dist/release/* \
+              --title "Pinleaf $TAG" \
+              --generate-notes
+          fi

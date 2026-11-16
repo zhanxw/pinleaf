@@ -1,0 +1,15 @@
+[package]
+name = "pinleaf-annot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pinleaf-core.workspace = true
+lopdf.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+pinleaf-engine.workspace = true

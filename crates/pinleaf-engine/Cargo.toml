@@ -1,0 +1,18 @@
+[package]
+name = "pinleaf-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pinleaf-core.workspace = true
+hayro.workspace = true
+hayro-interpret.workspace = true
+hayro-syntax.workspace = true
+kurbo.workspace = true
+lopdf.workspace = true
+compact_str.workspace = true
+smallvec.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+regex.workspace = true

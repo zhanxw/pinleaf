@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pinleaf-core",
+    "crates/pinleaf-engine",
+    "crates/pinleaf-annot",
+    "crates/pinleaf",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+pinleaf-core = { path = "crates/pinleaf-core" }
+pinleaf-engine = { path = "crates/pinleaf-engine" }
+pinleaf-annot = { path = "crates/pinleaf-annot" }
+
+hayro = "0.9"
+hayro-interpret = { version = "0.9", features = ["embed-fonts", "embed-cmaps"] }
+hayro-syntax = "0.9"
+kurbo = "0.13"
+lopdf = "0.46"
+
+gpui = { package = "gpui-ce", version = "0.3" }
+gpui_platform = { package = "gpui_ce_platform", version = "0.3" }
+
+uuid = { version = "1", features = ["v4"] }
+smallvec = "1"
+lru = "0.12"
+parking_lot = "0.12"
+rfd = "0.15"
+thiserror = "2"
+anyhow = "1"
+compact_str = "0.9"
+image = "0.25"
+resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+urlencoding = "2"

@@ -1,0 +1,30 @@
+[package]
+name = "pinleaf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pinleaf-core.workspace = true
+pinleaf-engine.workspace = true
+pinleaf-annot.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+image.workspace = true
+smallvec.workspace = true
+lru.workspace = true
+parking_lot.workspace = true
+rfd.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+resvg.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dirs.workspace = true
+urlencoding.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSResponder", "NSImage", "NSWorkspace"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSData", "NSObject", "NSString", "NSURL", "std"] }

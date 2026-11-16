@@ -1,0 +1,6 @@
+/target/
+/dist/
+/assets/Pinleaf.iconset/
+.DS_Store
+*.swp
+*.swo
