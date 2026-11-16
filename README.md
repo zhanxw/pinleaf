@@ -5,7 +5,7 @@
 <h1 align="center">Pinleaf</h1>
 
 <p align="center">
-  <strong>Pure-Rust multi-view academic PDF reader with unlimited freeze-and-branch panes, Smart Jump, and direct ISO-32000 PDF annotations.</strong>
+  <strong>Pure-Rust multi-view academic PDF reader with unlimited freeze-and-branch panes, scroll-linked portals, Vimium keyboard hints, two-way SyncTeX, and ISO-32000 PDF annotations.</strong>
 </p>
 
 <p align="center">
@@ -22,19 +22,50 @@
 
 ---
 
+## Video Walkthroughs
+
+New to Pinleaf? Watch the 30–37 second narrated **1080p** explainer videos covering each feature category, or read the full [Feature Tour & Recipes](docs/FEATURE_TOUR.md).
+
+### 01. Multi-View Freeze-and-Branch & Scroll-Linked Portals (30s)
+
+<p align="center">
+  <img src="docs/videos/01-freeze-and-portals.gif" width="840" alt="Pinleaf Multi-View Freeze-and-Branch & Scroll Portals" />
+</p>
+
+Freeze source context (`F` / `⌘D`), branch unlimited child panes (`#1 🔒 → #2 🔒 → #3`), smart-route references without scrolling away, and bind scroll-linked portals (`P` / `⇧P`) so helper panes auto-follow figures and equations as you read.
+- **1080p Video with Audio:** [Download / Stream 01-freeze-and-portals.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/01-freeze-and-portals.mp4) · [`docs/videos/01-freeze-and-portals.mp4`](docs/videos/01-freeze-and-portals.mp4)
+
+| **02. Smart Jump, Keyboard Hints & Navigation (36s)** | **03. ISO-32000 Annotations, 26 Categories & Library (37s)** |
+| :---: | :---: |
+| <img src="docs/videos/02-navigation-smart-jump-hints.gif" width="430" alt="Smart Jump, Vimium Hints & Navigation" /> | <img src="docs/videos/03-annotations-categories-library.gif" width="430" alt="PDF Annotations, 26 Categories & Library" /> |
+| Command Palette (`/` / `?`), Smart Jump & Right-Click Overview previews, 2-letter Vimium hints (`;` / `:` / `V`), Auto-TOC (`T`), regex search (`⌘F`), marks (`m` / `` ` ``)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/02-navigation-smart-jump-hints.mp4) · [repo copy](docs/videos/02-navigation-smart-jump-hints.mp4) | Column-aware highlights (`⌘H`), notes (`⌘M`), underline (`U`), strikeout (`S`), area box (`A`), atomic PDF `/Annots` saves (`⌘S`), 26 categories (`H + a–z`), sidebar filter chips (`⇧⌘A`), Global Search (`⇧⌘F`), Scholar/DOI (`⇧⌘K`)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/03-annotations-categories-library.mp4) · [repo copy](docs/videos/03-annotations-categories-library.mp4) |
+
+| **04. Smart Dark Mode, Comfort & Presentation (35s)** | **05. Live Auto-Reload, SyncTeX, CLI IPC & Extensions (36s)** |
+| :---: | :---: |
+| <img src="docs/videos/04-themes-comfort-presentation.gif" width="430" alt="Smart Dark Mode, Comfort & Presentation Mode" /> | <img src="docs/videos/05-synctex-ipc-extensions.gif" width="430" alt="SyncTeX, CLI IPC & Shell Extensions" /> |
+| Light / Dark / Sepia / Custom hex themes (`F8`), figure-preserving Smart Dark Mode (`⇧F8`), Fit Content Width (`F10` / `W`), Reading Ruler (`R`), 60 FPS Auto-Scroll (`F6`), Presentation Mode (`F5`)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/04-themes-comfort-presentation.mp4) · [repo copy](docs/videos/04-themes-comfort-presentation.mp4) | 800 ms TeX/Typst auto-reload, pure-Rust `.synctex.gz` forward (`--synctex-forward`) & inverse (`⌘+Click` / `⇧⌘J`), Unix socket IPC (`--execute-command`), shell/Python extensions (`⇧⌘E`)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/05-synctex-ipc-extensions.mp4) · [repo copy](docs/videos/05-synctex-ipc-extensions.mp4) |
+
+---
+
 ## Features
 
 - **Unlimited Freeze & Branch Multi-View (`#1 🔒 → #2 🔒 → #3 → …`):**
-  Freeze the active reading pane at its exact page, scroll anchor, and zoom scale, then split right (`⌘D`), split down (`⇧⌘D`), or open a new OS window (`⇧⌘N`) to chase derivations, theorems, and citations without losing your place. Clicking internal links or Smart Jumps inside a frozen pane automatically routes the active descendant viewport.
-- **Native ISO-32000 PDF `/Annots` Persistence:**
-  Select text across columns, highlight (`⌘H`), add sticky-note highlights (`⌘M`), underline, strikeout, or draw area marquees (`A`) with full undo/redo (`⌘Z` / `⇧⌘Z`) and atomic incremental writes (`⌘S`) directly into the PDF file so Apple Preview and other readers see your annotations.
-- **Academic Reading Ergonomics (Sioyek-inspired):**
-  - **Heuristic Smart Jump:** Click unlinked references like `Figure 1`, `Theorem 2`, `Table 1`, `Eq. (3)`, or `[12]` to jump to their target — or **Right-Click** for a floating **Overview** preview without scrolling away.
-  - **Embedded + Auto-TOC (`⌘T` / `T`):** Fuzzy-filter document outlines, or automatically infer headings from font hierarchy and section numbers when `/Outlines` is absent.
-  - **Full-Text & Regex Search (`⌘F`), Quick-Open Recent (`⌘P`), & Global Highlight Search (`⇧⌘F`).**
-  - **Reading Comfort:** Fit-to-content-width (`F10` / `W`), Light / Dark / Sepia themes (`F8`), movable Visual Reading Ruler (`R`), Vim-style navigation (`j`/`k`/`d`/`u`/`g`/`G`), jump history (`⌘[` / `⌘]`), location marks (`m` / `` ` ``), Google Scholar / DOI lookup (`⇧⌘K`), and live 800 ms PDF auto-reload for LaTeX/Typst workflows.
+  Freeze the active reading pane at its exact page, scroll anchor, and zoom scale (`F`), then split right (`⌘D`), split down (`⇧⌘D`), open a new OS window (`⇧⌘N`), or detach panes (`⌥⌘W`) to chase derivations and proofs. Clicking internal links or Smart Jumps inside a frozen pane automatically routes the active descendant viewport.
+- **Scroll-Linked Portals (`P`, `⇧P`, `⌥P`):**
+  Bind any reading paragraph (or active Overview card) to a figure, table, or equation anchor (`P`), spawn or toggle a `Portal Follower` pane (`⇧P`) that switches targets automatically as you scroll, delete the nearest portal (`⌥P`), and persist portals per PDF in `LibraryStore`.
+- **Keyboard-First Navigation, Smart Jump & Vimium Hints:**
+  - **Command Palette (`/` or `?`):** Fuzzy-filter all commands and inspect platform shortcuts.
+  - **Heuristic Smart Jump:** Click unlinked references like `Figure 1`, `Theorem 2`, `Eq. (3)`, or `[12]` to jump, or **Right-Click** for a floating **Overview** preview without scrolling away.
+  - **2-Letter Home-Row Hints (`;` / `:` / `V`):** Overlay yellow badges on visible links, smart-jump refs, and words for mouse-free Jump (`;`), Overview (`:`), and two-endpoint Text Select (`V`).
+  - **Embedded + Auto-TOC (`T` / `⌘T`), Regex Search (`⌘F`), & Marks (`m` / `` ` ``):** Infer section outlines automatically when `/Outlines` is absent, run `re:` regex queries, save single-key bookmarks, and navigate jump history (`⌘[` / `⌘]`) or Vim keys (`j`/`k`/`d`/`u`/`g`/`G`).
+- **Native ISO-32000 PDF `/Annots` & 26 Typed Highlight Categories (`H + a–z`):**
+  Select text across two columns to highlight (`⌘H`), attach inline sticky notes (`⌘M`), underline (`U`), strikeout (`S`), or draw figure area marquees (`A`) with undo/redo (`⌘Z` / `⇧⌘Z`) and atomic incremental writes (`⌘S`) readable by Apple Preview and standard PDF viewers. Tag or re-tag highlights into 26 buckets (`H + a–z`, saved via `/Subj (pinleaf-cat:<ch>)`) and filter in the Notes Sidebar (`⇧⌘A`), Quick-Open Recent (`⌘P`), Global Highlight Search (`⇧⌘F`), or Scholar/DOI lookup (`⇧⌘K`).
+- **Smart Dark Mode, Reading Comfort & Presentation Mode:**
+  Cycle `Light` / `Dark` / `Sepia` / `Custom` (`F8`), toggle `Smart Dark Mode` (`⇧F8`) so `hayro` preserves raster plots/diagrams un-inverted inside dark & custom themes, crop margins to content width (`F10` / `W`), step lines with the Visual Reading Ruler (`R`), stream smoothly with 60 FPS Auto-Scroll (`F6`, `⌥=` / `⌥-`), and switch to chrome-free fullscreen Presentation Mode (`F5`).
+- **Two-Way SyncTeX, CLI IPC & Shell Extensions:**
+  800 ms live PDF auto-reload for LaTeX/Typst, pure-Rust `.synctex.gz` forward & inverse search (`⌘+Click` / `⇧⌘J`), private Unix domain socket IPC (`--execute-command`), and shell/Python workflow extensions (`⇧⌘E` + custom `extensions[].key` hotkeys).
 - **Pure Rust + Metal GPU UI:**
-  Built on `gpui-ce`, `hayro`, `lopdf`, and `resvg`.
+  Built on `gpui-ce`, `hayro`, `lopdf`, `flate2`, and `resvg`.
 
 ---
 
@@ -58,12 +89,41 @@ cargo run --locked -p pinleaf -- --self-test
 ./scripts/package_macos.sh
 ```
 
-Custom user defaults and keybindings live in `~/.config/pinleaf/config.json`:
+---
+
+## CLI, SyncTeX IPC & Configuration
+
+```bash
+# Forward search from TeX/LaTeX source line[:col] (reuses running Pinleaf window via IPC)
+pinleaf --synctex-forward 42:1:/path/to/main.tex /path/to/paper.pdf
+
+# Drive a live Pinleaf window over $TMPDIR/pinleaf-$USER.sock
+pinleaf --execute-command goto_page 3
+pinleaf --execute-command split_right
+pinleaf --execute-command cycle_color_mode
+```
+
+Custom settings, themes, highlight categories, inverse-search editors, keybindings, and shell extensions live in `~/.config/pinleaf/config.json`:
 
 ```json
 {
-  "default_color_mode": "Sepia",
+  "default_color_mode": "Custom",
+  "smart_dark_mode": true,
+  "custom_bg_color": "#1e1e2e",
+  "custom_fg_color": "#cdd6f4",
   "auto_reload": true,
+  "inverse_search_command": "code -g {file}:{line}:{col}",
+  "highlight_categories": {
+    "t": { "label": "Main Theorem", "color": "#38bdf8" },
+    "q": { "label": "Open Question", "color": "#fb7185" }
+  },
+  "extensions": [
+    {
+      "name": "Copy Quote & DOI",
+      "command": "printf '%s (p.%s)' {selected_text} {page} | pbcopy",
+      "key": "ctrl-y"
+    }
+  ],
   "keybindings": {
     "open_search": "secondary-/"
   }
@@ -79,23 +139,31 @@ Custom user defaults and keybindings live in `~/.config/pinleaf/config.json`:
 | Command Palette | `/` or `?` |
 | Freeze / Unfreeze Pane | `F` |
 | Freeze & Split Right / Down | `⌘D` / `⇧⌘D` |
-| Freeze & New Window / Detach | `⇧⌘N` / `⌘⌥W` |
-| Table of Contents | `⌘T` or `T` |
-| Search in Document / Next / Prev | `⌘F` / `n` / `N` |
+| Freeze & New Window / Detach / Close | `⇧⌘N` / `⌥⌘W` / `⌘W` |
+| Link Portal / Toggle Follower / Delete Portal | `P` / `⇧P` / `⌥P` |
+| Vimium Hint Jump / Overview / Text Select | `;` / `:` / `V` |
+| Table of Contents | `T` or `⌘T` |
+| Search / Next / Prev | `⌘F` / `n` / `N` |
+| Notes Sidebar (Category Filters) | `⇧⌘A` |
 | Quick-Open Recent / Global Highlights | `⌘P` / `⇧⌘F` |
-| Highlight / Note / Lookup Scholar | `⌘H` / `⌘M` / `⇧⌘K` |
+| Highlight / Typed Category / Note | `⌘H` / `H + a–z` / `⌘M` |
+| Underline / Strikeout / Area Box | `U` / `S` / `A` |
+| Lookup Scholar / DOI | `⇧⌘K` |
 | Fit Width / Fit Content Margins | `⌘0` / `F10` or `W` |
-| Light / Dark / Sepia Theme | `F8` |
-| Reading Ruler / Area Mode | `R` / `A` |
-| Set Mark / Jump to Mark | `m<char>` / `` `<char> `` |
-| Jump Back / Forward | `⌘[` (`Ctrl+O`) / `⌘]` (`Ctrl+I`) |
+| Cycle Theme / Toggle Smart Dark Figures | `F8` / `⇧F8` |
+| Reading Ruler / Auto-Scroll / Presentation | `R` / `F6` (`⌥+`/`⌥-`) / `F5` |
+| SyncTeX Jump to TeX Source | `⇧⌘J` or `⌘+Click` |
+| Shell & Python Extensions Modal | `⇧⌘E` |
+| Set Mark / Jump to Mark | `m + key` / `` ` + key `` |
+| Jump Back / Forward | `⌘[` (`^O`) / `⌘]` (`^I`) |
 | Save / Save As / Open / New Window | `⌘S` / `⇧⌘S` / `⌘O` / `⌘N` |
 
 ---
 
 ## Workspace Layout
 
-- `crates/pinleaf-core` — Normalized coordinates, selection geometry, `AnnotationStore`, `ReadingTrailGraph`, and `JumpHistory`.
-- `crates/pinleaf-engine` — `hayro` PDF rasterizer, 2-column glyph/line extractor, `/Link` destination resolver, Auto-TOC, search, and Smart Jump heuristics.
-- `crates/pinleaf-annot` — ISO-32000 `/Annots` reader and atomic incremental PDF writer (`lopdf`).
-- `crates/pinleaf` — Metal GPU GPUI application, split/window coordinator, macOS menu bar & URL handler, and SVG icon pipeline.
+- `crates/pinleaf-core` — Normalized coordinates, selection geometry, `AnnotationStore` (26 categories), `PortalLink`, `ReadingTrailGraph`, and `JumpHistory`.
+- `crates/pinleaf-engine` — `hayro` PDF rasterizer & figure-rect extractor, 2-column glyph/line extractor, `/Link` destination resolver, Auto-TOC, search, Smart Jump heuristics, and pure-Rust SyncTeX parser.
+- `crates/pinleaf-annot` — ISO-32000 `/Annots` reader (`/Subj` category persistence) and atomic incremental PDF writer (`lopdf`).
+- `crates/pinleaf` — Metal GPU GPUI application, split/portal coordinator, Vimium hints, Unix domain socket IPC, external extensions, and SVG icon pipeline.
+- `docs/videos` & `videos/remotion-explainer` — Introductory feature explainer videos (`.mp4`, `.gif`, `.png`) and reproducible Remotion source.

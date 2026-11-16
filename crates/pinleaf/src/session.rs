@@ -10,14 +10,18 @@ use image::{Frame, RgbaImage};
 use lru::LruCache;
 use pinleaf_annot::{load_annotations, save_annotations_atomic, save_annotations_to_bytes};
 use pinleaf_core::{
-    Annotation, AnnotationId, AnnotationStore, PageIndex, PageTransform, ReadingAnchor, RgbaColor,
-    annotation::pdf_now_string,
+    Annotation, AnnotationId, AnnotationStore, NormRect, PageIndex, PageTransform, PortalLink,
+    ReadingAnchor, RgbaColor, annotation::pdf_now_string, find_active_portal,
 };
 use pinleaf_engine::demo_fixture::build_demo_pdf_bytes;
 use pinleaf_engine::{
-    LinkRegion, PageMeta, PageTextLayout, PdfDocumentHandle, SearchMatch, TocEntry,
-    extract_all_links, extract_page_text, extract_toc, render_page_bgra, search_layouts,
+    LinkRegion, PageMeta, PageTextLayout, PdfDocumentHandle, SearchMatch, SyncTexMap,
+    SyncTexPdfLoc, TocEntry, extract_all_links, extract_page_image_rects, extract_page_text,
+    extract_toc, render_page_bgra, search_layouts,
 };
+
+pub const DEFAULT_CUSTOM_BG_RGB: [u8; 3] = [0x1e, 0x1e, 0x2e];
+pub const DEFAULT_CUSTOM_FG_RGB: [u8; 3] = [0xcd, 0xd6, 0xf4];
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ColorMode {
@@ -25,6 +29,7 @@ pub enum ColorMode {
     Light,
     Dark,
     Sepia,
+    Custom,
 }
 
 impl ColorMode {
@@ -32,7 +37,8 @@ impl ColorMode {
         match self {
             Self::Light => Self::Dark,
             Self::Dark => Self::Sepia,
-            Self::Sepia => Self::Light,
+            Self::Sepia => Self::Custom,
+            Self::Custom => Self::Light,
         }
     }
 
@@ -41,35 +47,77 @@ impl ColorMode {
             Self::Light => "Light",
             Self::Dark => "Dark",
             Self::Sepia => "Sepia",
+            Self::Custom => "Custom",
         }
     }
 }
 
 /// Applies reading color mode transform in-place on premultiplied BGRA8 pixels.
+#[cfg(test)]
 pub fn apply_color_mode_bgra(pixels_bgra: &mut [u8], mode: ColorMode) {
-    match mode {
-        ColorMode::Light => {}
-        ColorMode::Sepia => {
-            for px in pixels_bgra.chunks_exact_mut(4) {
+    let width = (pixels_bgra.len() / 4).max(1) as u32;
+    apply_color_mode_bgra_with_rects(
+        pixels_bgra,
+        width,
+        1,
+        mode,
+        (DEFAULT_CUSTOM_BG_RGB, DEFAULT_CUSTOM_FG_RGB),
+        &[],
+    );
+}
+
+/// Applies reading color mode transform in-place on premultiplied BGRA8 pixels while preserving
+/// raster figure rectangles (`[x0, y0, x1, y1]`) un-inverted in `Dark` and `Custom` modes.
+pub fn apply_color_mode_bgra_with_rects(
+    pixels_bgra: &mut [u8],
+    width: u32,
+    height: u32,
+    mode: ColorMode,
+    custom_bg_fg: ([u8; 3], [u8; 3]),
+    preserve_rects_px: &[[u32; 4]],
+) {
+    if mode == ColorMode::Light || width == 0 || height == 0 {
+        return;
+    }
+
+    let in_preserved = |x: u32, y: u32| -> bool {
+        preserve_rects_px
+            .iter()
+            .any(|&[x0, y0, x1, y1]| x >= x0 && x < x1 && y >= y0 && y < y1)
+    };
+
+    let (bg_rgb, fg_rgb) = custom_bg_fg;
+    let w_usize = width as usize;
+
+    for (idx, px) in pixels_bgra.chunks_exact_mut(4).enumerate() {
+        let x = (idx % w_usize) as u32;
+        let y = (idx / w_usize) as u32;
+
+        if !preserve_rects_px.is_empty()
+            && matches!(mode, ColorMode::Dark | ColorMode::Custom)
+            && in_preserved(x, y)
+        {
+            continue;
+        }
+
+        match mode {
+            ColorMode::Light => {}
+            ColorMode::Sepia => {
                 px[0] = (px[0] as f32 * 0.82).clamp(16.0, 240.0) as u8;
                 px[1] = (px[1] as f32 * 0.92).clamp(14.0, 246.0) as u8;
                 px[2] = (px[2] as f32 * 0.97).clamp(18.0, 250.0) as u8;
             }
-        }
-        ColorMode::Dark => {
-            for px in pixels_bgra.chunks_exact_mut(4) {
+            ColorMode::Dark => {
                 let b = px[0] as f32;
                 let g = px[1] as f32;
                 let r = px[2] as f32;
                 let max_c = r.max(g).max(b);
                 let min_c = r.min(g).min(b);
                 if (max_c - min_c) < 18.0 {
-                    // Neutral tones map smoothly to cool slate #14161c background -> #ebe8e4 ink.
                     px[0] = (28.0 + (255.0 - b) * (200.0 / 255.0)).clamp(0.0, 255.0) as u8;
                     px[1] = (22.0 + (255.0 - g) * (210.0 / 255.0)).clamp(0.0, 255.0) as u8;
                     px[2] = (20.0 + (255.0 - r) * (215.0 / 255.0)).clamp(0.0, 255.0) as u8;
                 } else {
-                    // Saturated colors keep relative hue while inverting lightness midpoint.
                     let mid = 0.5 * (max_c + min_c);
                     let target_mid = 232.0 - mid * (200.0 / 255.0);
                     let delta = target_mid - mid;
@@ -77,6 +125,18 @@ pub fn apply_color_mode_bgra(pixels_bgra: &mut [u8], mode: ColorMode) {
                     px[1] = (g + delta).clamp(20.0, 250.0) as u8;
                     px[2] = (r + delta).clamp(18.0, 250.0) as u8;
                 }
+            }
+            ColorMode::Custom => {
+                let b = px[0] as f32;
+                let g = px[1] as f32;
+                let r = px[2] as f32;
+                let lum_t = ((0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0).clamp(0.0, 1.0);
+                let out_r = fg_rgb[0] as f32 + (bg_rgb[0] as f32 - fg_rgb[0] as f32) * lum_t;
+                let out_g = fg_rgb[1] as f32 + (bg_rgb[1] as f32 - fg_rgb[1] as f32) * lum_t;
+                let out_b = fg_rgb[2] as f32 + (bg_rgb[2] as f32 - fg_rgb[2] as f32) * lum_t;
+                px[0] = out_b.clamp(0.0, 255.0) as u8;
+                px[1] = out_g.clamp(0.0, 255.0) as u8;
+                px[2] = out_r.clamp(0.0, 255.0) as u8;
             }
         }
     }
@@ -87,6 +147,8 @@ pub struct TileCacheKey {
     pub page: PageIndex,
     pub zoom_bucket: i16,
     pub color_mode: ColorMode,
+    pub preserve_figures: bool,
+    pub custom_bg_fg: ([u8; 3], [u8; 3]),
 }
 
 /// Quantizes continuous zoom scale into ~19% exponential buckets (`2^(bucket / 4)`) so
@@ -122,13 +184,22 @@ pub struct DocumentSession {
     in_flight_renders: HashSet<TileCacheKey>,
     text_cache: LruCache<PageIndex, Arc<PageTextLayout>>,
     content_bounds_cache: HashMap<PageIndex, (f32, f32)>,
+    image_rects_cache: HashMap<PageIndex, Arc<Vec<NormRect>>>,
     pub all_layouts: Option<Arc<Vec<Arc<PageTextLayout>>>>,
     indexing_all_layouts: bool,
     pub color_mode: ColorMode,
+    pub smart_dark_mode: bool,
+    pub custom_bg_rgb: [u8; 3],
+    pub custom_fg_rgb: [u8; 3],
     pub auto_reload: bool,
     last_mtime: Option<SystemTime>,
     watcher_started: bool,
     pub marks: HashMap<char, ReadingAnchor>,
+    pub portals: Vec<PortalLink>,
+    pub next_portal_id: u64,
+    pub pending_portal_src: Option<(PageIndex, f32)>,
+    pub synctex: Option<Arc<SyncTexMap>>,
+    pub synctex_highlight: Option<(PageIndex, NormRect)>,
     pub search: SearchState,
     pub annotations: AnnotationStore,
     pub status_message: Option<(String, bool)>,
@@ -167,6 +238,10 @@ impl DocumentSession {
             .as_ref()
             .and_then(|p| std::fs::metadata(p).ok())
             .and_then(|m| m.modified().ok());
+        let synctex = path
+            .as_ref()
+            .and_then(|p| SyncTexMap::load_for_pdf(p))
+            .map(Arc::new);
 
         Ok(Self {
             path,
@@ -181,13 +256,22 @@ impl DocumentSession {
             in_flight_renders: HashSet::new(),
             text_cache: LruCache::new(NonZeroUsize::new(64).unwrap()),
             content_bounds_cache: HashMap::new(),
+            image_rects_cache: HashMap::new(),
             all_layouts: None,
             indexing_all_layouts: false,
             color_mode: ColorMode::Light,
+            smart_dark_mode: true,
+            custom_bg_rgb: DEFAULT_CUSTOM_BG_RGB,
+            custom_fg_rgb: DEFAULT_CUSTOM_FG_RGB,
             auto_reload: true,
             last_mtime,
             watcher_started: false,
             marks: HashMap::new(),
+            portals: Vec::new(),
+            next_portal_id: 1,
+            pending_portal_src: None,
+            synctex,
+            synctex_highlight: None,
             search: SearchState::default(),
             annotations,
             status_message: None,
@@ -204,10 +288,14 @@ impl DocumentSession {
         target_bucket: i16,
     ) -> (Option<Arc<RenderImage>>, bool) {
         let mode = self.color_mode;
+        let preserve_figures = self.smart_dark_mode && matches!(mode, ColorMode::Dark | ColorMode::Custom);
+        let custom_bg_fg = (self.custom_bg_rgb, self.custom_fg_rgb);
         let exact_key = TileCacheKey {
             page,
             zoom_bucket: target_bucket,
             color_mode: mode,
+            preserve_figures,
+            custom_bg_fg,
         };
         if let Some(img) = self.bitmap_cache.get(&exact_key) {
             return (Some(img.clone()), true);
@@ -215,7 +303,11 @@ impl DocumentSession {
 
         let mut best: Option<(i16, Arc<RenderImage>)> = None;
         for (k, img) in self.bitmap_cache.iter() {
-            if k.page == page && k.color_mode == mode {
+            if k.page == page
+                && k.color_mode == mode
+                && k.preserve_figures == preserve_figures
+                && k.custom_bg_fg == custom_bg_fg
+            {
                 let dist = (k.zoom_bucket - target_bucket).abs();
                 if best.as_ref().is_none_or(|(bd, _)| dist < *bd) {
                     best = Some((dist, img.clone()));
@@ -232,10 +324,14 @@ impl DocumentSession {
         cx: &mut Context<Self>,
     ) {
         let mode = self.color_mode;
+        let preserve_figures = self.smart_dark_mode && matches!(mode, ColorMode::Dark | ColorMode::Custom);
+        let custom_bg_fg = (self.custom_bg_rgb, self.custom_fg_rgb);
         let key = TileCacheKey {
             page,
             zoom_bucket,
             color_mode: mode,
+            preserve_figures,
+            custom_bg_fg,
         };
         if self.bitmap_cache.contains(&key) || self.in_flight_renders.contains(&key) {
             return;
@@ -243,19 +339,65 @@ impl DocumentSession {
         self.in_flight_renders.insert(key);
         let handle = self.pdf_handle.clone();
         let scale = zoom_bucket_to_scale(zoom_bucket);
+        let (norm_w, norm_h) = self
+            .page_metas
+            .get(page.as_usize())
+            .map(|m| (m.norm_width, m.norm_height))
+            .unwrap_or((612.0, 792.0));
+        let cached_image_rects = self.image_rects_cache.get(&page).cloned();
 
         cx.spawn(async move |session, cx| {
             let rendered = cx
                 .background_spawn(async move {
                     let mut frame = render_page_bgra(&handle, page, scale)?;
-                    apply_color_mode_bgra(&mut frame.pixels_bgra, mode);
-                    Ok::<_, pinleaf_engine::EngineError>(frame)
+                    let computed_rects = if preserve_figures {
+                        match cached_image_rects {
+                            Some(existing) => Some(existing),
+                            None => Some(Arc::new(extract_page_image_rects(&handle, page))),
+                        }
+                    } else {
+                        None
+                    };
+
+                    let px_rects: Vec<[u32; 4]> = computed_rects
+                        .as_deref()
+                        .map(|rects| {
+                            let sx = frame.width as f32 / norm_w.max(1.0);
+                            let sy = frame.height as f32 / norm_h.max(1.0);
+                            rects
+                                .iter()
+                                .map(|r| {
+                                    [
+                                        (r.min_x * sx).floor().clamp(0.0, frame.width as f32) as u32,
+                                        (r.min_y * sy).floor().clamp(0.0, frame.height as f32)
+                                            as u32,
+                                        (r.max_x * sx).ceil().clamp(0.0, frame.width as f32) as u32,
+                                        (r.max_y * sy).ceil().clamp(0.0, frame.height as f32)
+                                            as u32,
+                                    ]
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    apply_color_mode_bgra_with_rects(
+                        &mut frame.pixels_bgra,
+                        frame.width,
+                        frame.height,
+                        mode,
+                        custom_bg_fg,
+                        &px_rects,
+                    );
+                    Ok::<_, pinleaf_engine::EngineError>((frame, computed_rects))
                 })
                 .await;
 
             let _ = session.update(cx, |session, cx| {
                 session.in_flight_renders.remove(&key);
-                if let Ok(frame) = rendered {
+                if let Ok((frame, computed_rects)) = rendered {
+                    if let Some(rects) = computed_rects {
+                        session.image_rects_cache.insert(page, rects);
+                    }
                     if let Some(rgba_buf) =
                         RgbaImage::from_raw(frame.width, frame.height, frame.pixels_bgra)
                     {
@@ -422,6 +564,87 @@ impl DocumentSession {
         cx.notify();
     }
 
+    pub fn toggle_smart_dark_mode(&mut self, cx: &mut Context<Self>) {
+        self.smart_dark_mode = !self.smart_dark_mode;
+        self.status_message = Some((
+            format!(
+                "Smart Figure Preservation: {}",
+                if self.smart_dark_mode { "ON" } else { "OFF" }
+            ),
+            false,
+        ));
+        cx.notify();
+    }
+
+    pub fn add_portal(
+        &mut self,
+        src_page: PageIndex,
+        src_focal_y: f32,
+        dst: ReadingAnchor,
+        label: String,
+        cx: &mut Context<Self>,
+    ) -> PortalLink {
+        let id = self.next_portal_id;
+        self.next_portal_id += 1;
+        let portal = PortalLink {
+            id,
+            src_page,
+            src_focal_y,
+            dst,
+            label,
+        };
+        self.portals.push(portal.clone());
+        self.pending_portal_src = None;
+        self.status_message = Some((
+            format!(
+                "Portal #{id} linked: p.{} -> p.{}",
+                src_page.one_based(),
+                dst.page.one_based()
+            ),
+            false,
+        ));
+        cx.notify();
+        portal
+    }
+
+    pub fn delete_nearest_portal(
+        &mut self,
+        page: PageIndex,
+        focal_y: f32,
+        cx: &mut Context<Self>,
+    ) -> Option<PortalLink> {
+        let active_id = find_active_portal(&self.portals, page, focal_y)?.id;
+        let pos = self.portals.iter().position(|p| p.id == active_id)?;
+        let removed = self.portals.remove(pos);
+        self.status_message = Some((format!("Removed Portal #{}", removed.id), false));
+        cx.notify();
+        Some(removed)
+    }
+
+    pub fn apply_synctex_forward(
+        &mut self,
+        tex_path: &Path,
+        line: u32,
+        cx: &mut Context<Self>,
+    ) -> Option<SyncTexPdfLoc> {
+        if self.synctex.is_none()
+            && let Some(ref p) = self.path
+        {
+            self.synctex = SyncTexMap::load_for_pdf(p).map(Arc::new);
+        }
+        let loc = self.synctex.as_ref()?.forward_search(tex_path, line)?;
+        self.synctex_highlight = Some((loc.page, loc.rect));
+        self.status_message = Some((
+            format!(
+                "SyncTeX forward -> p.{} (line {line})",
+                loc.page.one_based()
+            ),
+            false,
+        ));
+        cx.notify();
+        Some(loc)
+    }
+
     pub fn content_x_bounds_read(&self, page: PageIndex) -> (f32, f32) {
         if let Some(&cached) = self.content_bounds_cache.get(&page) {
             return cached;
@@ -480,6 +703,22 @@ impl DocumentSession {
         if self
             .annotations
             .update_color(id, color, pdf_now_string())
+        {
+            self.status_message = None;
+            cx.notify();
+        }
+    }
+
+    pub fn update_annotation_category(
+        &mut self,
+        id: AnnotationId,
+        category: Option<char>,
+        color: RgbaColor,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .annotations
+            .update_category_and_color(id, category, color, pdf_now_string())
         {
             self.status_message = None;
             cx.notify();
@@ -584,6 +823,48 @@ impl DocumentSession {
         cx.notify();
     }
 
+    pub fn apply_reloaded_snapshot(&mut self, snap: ReloadedSnapshot, cur_mtime: Option<SystemTime>, cx: &mut Context<Self>) {
+        self.last_mtime = cur_mtime;
+        self.pdf_bytes = snap.pdf_bytes;
+        self.pdf_handle = snap.pdf_handle;
+        self.page_metas = snap.page_metas;
+        self.page_transforms = snap.page_transforms;
+        self.links_by_page = snap.links_by_page;
+        self.toc_entries = snap.toc_entries;
+        self.synctex = snap.synctex;
+
+        while let Some((_, img)) = self.bitmap_cache.pop_lru() {
+            cx.drop_image(img, None);
+        }
+        self.in_flight_renders.clear();
+        self.text_cache.clear();
+        self.content_bounds_cache.clear();
+        self.image_rects_cache.clear();
+        self.all_layouts = None;
+        self.indexing_all_layouts = false;
+
+        if !self.annotations.is_dirty() {
+            self.annotations = AnnotationStore::from_loaded(snap.loaded_annots);
+        }
+        if !self.search.query.is_empty() {
+            self.run_search_with_cached_layouts();
+        }
+        self.trigger_background_text_index(cx);
+        cx.notify();
+    }
+
+    pub fn force_reload_from_disk(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(ref path) = self.path else {
+            return false;
+        };
+        let Some((snap, loaded_mtime)) = parse_reloaded_snapshot(path) else {
+            return false;
+        };
+        self.apply_reloaded_snapshot(snap, loaded_mtime, cx);
+        self.status_message = Some(("Reloaded PDF from disk".to_string(), false));
+        true
+    }
+
     pub fn start_file_watcher(&mut self, cx: &mut Context<Self>) {
         if self.watcher_started || self.path.is_none() {
             return;
@@ -633,30 +914,7 @@ impl DocumentSession {
                     if s.path.as_deref() != Some(path.as_path()) {
                         return;
                     }
-                    s.last_mtime = loaded_mtime.or(cur_mtime);
-                    s.pdf_bytes = snap.pdf_bytes;
-                    s.pdf_handle = snap.pdf_handle;
-                    s.page_metas = snap.page_metas;
-                    s.page_transforms = snap.page_transforms;
-                    s.links_by_page = snap.links_by_page;
-                    s.toc_entries = snap.toc_entries;
-
-                    while let Some((_, img)) = s.bitmap_cache.pop_lru() {
-                        cx.drop_image(img, None);
-                    }
-                    s.in_flight_renders.clear();
-                    s.text_cache.clear();
-                    s.content_bounds_cache.clear();
-                    s.all_layouts = None;
-                    s.indexing_all_layouts = false;
-
-                    if !s.annotations.is_dirty() {
-                        s.annotations = AnnotationStore::from_loaded(snap.loaded_annots);
-                    }
-                    if !s.search.query.is_empty() {
-                        s.run_search_with_cached_layouts();
-                    }
-                    s.trigger_background_text_index(cx);
+                    s.apply_reloaded_snapshot(snap, loaded_mtime.or(cur_mtime), cx);
                     s.status_message = Some(("Auto-reloaded updated PDF".to_string(), false));
                     cx.notify();
                 });
@@ -666,7 +924,7 @@ impl DocumentSession {
     }
 }
 
-struct ReloadedSnapshot {
+pub struct ReloadedSnapshot {
     pdf_bytes: Arc<Vec<u8>>,
     pdf_handle: Arc<PdfDocumentHandle>,
     page_metas: Vec<PageMeta>,
@@ -674,6 +932,7 @@ struct ReloadedSnapshot {
     links_by_page: HashMap<PageIndex, Vec<LinkRegion>>,
     toc_entries: Vec<TocEntry>,
     loaded_annots: Vec<Annotation>,
+    synctex: Option<Arc<SyncTexMap>>,
 }
 
 fn parse_reloaded_snapshot(path: &Path) -> Option<(ReloadedSnapshot, Option<SystemTime>)> {
@@ -686,6 +945,7 @@ fn parse_reloaded_snapshot(path: &Path) -> Option<(ReloadedSnapshot, Option<Syst
     let links_by_page = extract_all_links(&pdf_bytes, &page_transforms);
     let toc_entries = extract_toc(&pdf_bytes, &pdf_handle);
     let loaded_annots = load_annotations(&pdf_bytes, &page_transforms).unwrap_or_default();
+    let synctex = SyncTexMap::load_for_pdf(path).map(Arc::new);
     Some((
         ReloadedSnapshot {
             pdf_bytes,
@@ -695,6 +955,7 @@ fn parse_reloaded_snapshot(path: &Path) -> Option<(ReloadedSnapshot, Option<Syst
             links_by_page,
             toc_entries,
             loaded_annots,
+            synctex,
         },
         loaded_mtime,
     ))
@@ -743,5 +1004,23 @@ mod tests {
         assert_eq!(&dark[4..8], &[228, 232, 235, 255]);
         // Blue accent stays blue-dominant
         assert!(dark[8] > dark[10]);
+
+        // Smart figure preservation keeps pixels inside [1, 0, 2, 1] completely unchanged in Dark and Custom modes
+        let mut preserved = [
+            255u8, 255, 255, 255, // (0, 0) paper
+            40, 200, 30, 255, // (1, 0) figure pixel -> preserved
+            0, 0, 0, 255, // (2, 0) ink
+        ];
+        apply_color_mode_bgra_with_rects(
+            &mut preserved,
+            3,
+            1,
+            ColorMode::Custom,
+            ([0x1e, 0x1e, 0x2e], [0xcd, 0xd6, 0xf4]),
+            &[[1, 0, 2, 1]],
+        );
+        assert_eq!(&preserved[0..4], &[0x2e, 0x1e, 0x1e, 255]);
+        assert_eq!(&preserved[4..8], &[40, 200, 30, 255]);
+        assert_eq!(&preserved[8..12], &[0xf4, 0xd6, 0xcd, 255]);
     }
 }

@@ -3,9 +3,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{AnyWindowHandle, App, BorrowAppContext, Entity, Global, RenderImage, WeakEntity, Window};
-use pinleaf_core::{FreezeState, PageIndex, ReadingTrailGraph, TrailNode, ViewportId};
+use pinleaf_core::{
+    FreezeState, PageIndex, ReadingTrailGraph, RgbaColor, TrailNode, ViewportId,
+    find_active_portal, highlight_category_spec,
+};
 
-use crate::library::{IndexedHighlight, LibraryStore, RecentDocEntry, UserConfig, now_unix_secs};
+use crate::library::{
+    IndexedHighlight, LibraryStore, RecentDocEntry, UserConfig, now_unix_secs, parse_hex_rgb,
+};
 use crate::session::DocumentSession;
 use crate::viewport::PdfViewport;
 
@@ -50,8 +55,62 @@ impl AppRegistry {
         if let Some(mode) = self.user_config.default_color_mode {
             session.color_mode = mode;
         }
+        if let Some(smart) = self.user_config.smart_dark_mode {
+            session.smart_dark_mode = smart;
+        }
+        if let Some(ref bg) = self.user_config.custom_bg_color
+            && let Some(rgb) = parse_hex_rgb(bg)
+        {
+            session.custom_bg_rgb = rgb;
+        }
+        if let Some(ref fg) = self.user_config.custom_fg_color
+            && let Some(rgb) = parse_hex_rgb(fg)
+        {
+            session.custom_fg_rgb = rgb;
+        }
         if let Some(auto_reload) = self.user_config.auto_reload {
             session.auto_reload = auto_reload;
+        }
+        if let Some(ref path) = session.path {
+            let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            if let Some(entry) = self
+                .library
+                .documents
+                .iter()
+                .find(|d| d.path == canonical || &d.path == path)
+                && !entry.portals.is_empty()
+            {
+                session.portals = entry.portals.clone();
+                session.next_portal_id = session
+                    .portals
+                    .iter()
+                    .map(|p| p.id)
+                    .max()
+                    .unwrap_or(0)
+                    + 1;
+            }
+        }
+    }
+
+    pub fn resolve_highlight_category(&self, ch: char) -> (String, RgbaColor) {
+        let lower = ch.to_ascii_lowercase();
+        let key = lower.to_string();
+        if let Some(custom) = self.user_config.highlight_categories.get(&key) {
+            let (_, default_color) = highlight_category_spec(lower);
+            let color = parse_hex_rgb(&custom.color)
+                .map(|[r, g, b]| {
+                    RgbaColor::rgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
+                })
+                .unwrap_or(default_color);
+            let label = if custom.label.trim().is_empty() {
+                highlight_category_spec(lower).0.to_string()
+            } else {
+                custom.label.clone()
+            };
+            (label, color)
+        } else {
+            let (label, color) = highlight_category_spec(lower);
+            (label.to_string(), color)
         }
     }
 
@@ -86,6 +145,7 @@ impl AppRegistry {
             page_count: session.page_count(),
             last_page,
             highlights,
+            portals: session.portals.clone(),
         });
         let _ = self.library.save();
     }
@@ -249,7 +309,7 @@ pub fn focus_viewport_globally(
         }
         return;
     }
-    let _ = entry.window.update(cx, |_, window, cx| {
+        let _ = entry.window.update(cx, |_, window, cx| {
         window.activate();
         if let Some(vp) = entry.viewport.upgrade() {
             let fh = vp.read(cx).focus_handle().clone();
@@ -257,4 +317,57 @@ pub fn focus_viewport_globally(
         }
         window.refresh();
     });
+}
+
+/// Syncs all active `portal_follower` viewports (in splits or separate OS windows) showing
+/// `session` to the closest scroll-linked portal for `(cur_page, cur_focal_y)`. Returns how
+/// many follower viewports were found.
+pub fn sync_portal_followers(
+    session: &Entity<DocumentSession>,
+    source_id: ViewportId,
+    cur_page: PageIndex,
+    cur_focal_y: f32,
+    cx: &mut App,
+) -> usize {
+    let active_portal = {
+        let s = session.read(cx);
+        find_active_portal(&s.portals, cur_page, cur_focal_y).cloned()
+    };
+    let followers: Vec<(ViewportId, Entity<PdfViewport>, AnyWindowHandle)> = cx
+        .global::<AppRegistry>()
+        .viewports
+        .iter()
+        .filter_map(|(&id, entry)| {
+            if id == source_id {
+                return None;
+            }
+            let vp = entry.viewport.upgrade()?;
+            let vref = vp.read(cx);
+            if vref.session == *session && vref.portal_follower {
+                Some((id, vp, entry.window))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let count = followers.len();
+    if let Some(portal) = active_portal {
+        for (_, vp, win) in followers {
+            let changed = vp.update(cx, |vp, cx| {
+                let target_changed = vp.anchor != portal.dst
+                    || vp.active_portal_label.as_deref() != Some(portal.label.as_str());
+                if target_changed {
+                    vp.anchor = portal.dst;
+                    vp.active_portal_label = Some(portal.label.clone());
+                    cx.notify();
+                }
+                target_changed
+            });
+            if changed {
+                let _ = win.update(cx, |_, window, _| window.refresh());
+            }
+        }
+    }
+    count
 }

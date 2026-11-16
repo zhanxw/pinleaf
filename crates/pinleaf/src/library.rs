@@ -9,13 +9,50 @@ use crate::session::ColorMode;
 const MAX_RECENT_DOCS: usize = 200;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExtensionCommandConfig {
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomCategoryConfig {
+    pub label: String,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserConfig {
     #[serde(default)]
     pub default_color_mode: Option<ColorMode>,
     #[serde(default)]
+    pub smart_dark_mode: Option<bool>,
+    #[serde(default)]
+    pub custom_bg_color: Option<String>,
+    #[serde(default)]
+    pub custom_fg_color: Option<String>,
+    #[serde(default)]
     pub auto_reload: Option<bool>,
     #[serde(default)]
+    pub inverse_search_command: Option<String>,
+    #[serde(default)]
+    pub highlight_categories: HashMap<String, CustomCategoryConfig>,
+    #[serde(default)]
+    pub extensions: Vec<ExtensionCommandConfig>,
+    #[serde(default)]
     pub keybindings: HashMap<String, String>,
+}
+
+pub fn parse_hex_rgb(raw: &str) -> Option<[u8; 3]> {
+    let hex = raw.trim().strip_prefix('#').unwrap_or(raw.trim());
+    if hex.len() != 6 || !hex.is_ascii() {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some([r, g, b])
 }
 
 impl UserConfig {
@@ -44,7 +81,7 @@ pub struct IndexedHighlight {
     pub note: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RecentDocEntry {
     pub path: PathBuf,
     pub title: String,
@@ -53,6 +90,8 @@ pub struct RecentDocEntry {
     pub last_page: u32,
     #[serde(default)]
     pub highlights: Vec<IndexedHighlight>,
+    #[serde(default)]
+    pub portals: Vec<pinleaf_core::PortalLink>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -64,7 +103,7 @@ pub struct GlobalHighlightHit {
     pub note: String,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct LibraryStore {
     #[serde(default)]
     pub documents: Vec<RecentDocEntry>,
@@ -202,6 +241,7 @@ mod tests {
                 quote: "Normalized coordinates stay invariant across panes".to_string(),
                 note: "Key theorem".to_string(),
             }],
+            portals: Vec::new(),
         });
         store.upsert_entry(RecentDocEntry {
             path: PathBuf::from("/tmp/paper_b.pdf"),
@@ -214,6 +254,7 @@ mod tests {
                 quote: "GPU rasterization pipeline".to_string(),
                 note: "Fast Metal upload".to_string(),
             }],
+            portals: Vec::new(),
         });
         // Updating existing Paper A bumps it to newest
         store.upsert_entry(RecentDocEntry {
@@ -227,6 +268,7 @@ mod tests {
                 quote: "Normalized coordinates stay invariant across panes".to_string(),
                 note: "Key theorem".to_string(),
             }],
+            portals: Vec::new(),
         });
 
         let recent = store.filter_recent("");
@@ -255,16 +297,30 @@ mod tests {
         let cfg_file = dir.join("config.json");
         std::fs::write(
             &cfg_file,
-            r#"{
+            r##"{
               "default_color_mode": "Sepia",
+              "smart_dark_mode": false,
+              "custom_bg_color": "#1e1e2e",
+              "custom_fg_color": "#cdd6f4",
               "auto_reload": false,
+              "inverse_search_command": "code -g {file}:{line}:{col}",
+              "highlight_categories": {
+                "t": { "label": "Main Theorem", "color": "#44aaee" }
+              },
+              "extensions": [
+                { "name": "Copy Quote", "command": "printf '%s' {selected_text} | pbcopy", "key": "ctrl-y" }
+              ],
               "keybindings": { "open_search": "secondary-/" }
-            }"#,
+            }"##,
         )
         .unwrap();
         let cfg = UserConfig::load_from_path(&cfg_file);
         assert_eq!(cfg.default_color_mode, Some(ColorMode::Sepia));
+        assert_eq!(cfg.smart_dark_mode, Some(false));
+        assert_eq!(parse_hex_rgb(cfg.custom_bg_color.as_deref().unwrap()), Some([0x1e, 0x1e, 0x2e]));
         assert_eq!(cfg.auto_reload, Some(false));
+        assert_eq!(cfg.extensions.len(), 1);
+        assert_eq!(cfg.highlight_categories.get("t").map(|c| c.label.as_str()), Some("Main Theorem"));
         assert_eq!(cfg.keybindings.get("open_search").map(String::as_str), Some("secondary-/"));
         let _ = std::fs::remove_dir_all(&dir);
     }

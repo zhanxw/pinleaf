@@ -1,7 +1,7 @@
 use std::fmt;
 
 /// 0-based internal PDF page index.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct PageIndex(pub u32);
 
 impl PageIndex {
@@ -43,7 +43,7 @@ impl PdfPoint {
 }
 
 /// Normalized visual page-space point (origin at visual top-left of CropBox, rotation applied, Y increases downward, in PDF points 1/72").
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NormPoint {
     pub x: f32,
     pub y: f32,
@@ -57,7 +57,7 @@ impl NormPoint {
 }
 
 /// Axis-aligned rectangle in Normalized Page Space.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NormRect {
     pub min_x: f32,
     pub min_y: f32,

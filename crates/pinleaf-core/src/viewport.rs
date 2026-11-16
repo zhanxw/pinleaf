@@ -6,7 +6,7 @@ use crate::coords::{NormPoint, PageIndex};
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ViewportId(pub u64);
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ZoomSpec {
     FitWidth,
     FitContentWidth,
@@ -22,7 +22,7 @@ impl Default for ZoomSpec {
 }
 
 /// Exact reading position within a document, preserved when freezing or cloning a viewport.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ReadingAnchor {
     pub page: PageIndex,
     /// Scroll focal point normalized relative to the page dimensions (`0.0..=1.0`).
@@ -161,6 +161,42 @@ impl ReadingTrailGraph {
     }
 }
 
+/// Directional scroll-linked portal mapping a source reading region to a helper target anchor.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PortalLink {
+    pub id: u64,
+    pub src_page: PageIndex,
+    pub src_focal_y: f32,
+    pub dst: ReadingAnchor,
+    pub label: String,
+}
+
+/// Selects the active portal for the user's current reading position, prioritizing portals
+/// at or just above the current reading line.
+pub fn find_active_portal(
+    portals: &[PortalLink],
+    cur_page: PageIndex,
+    cur_focal_y: f32,
+) -> Option<&PortalLink> {
+    if portals.is_empty() {
+        return None;
+    }
+    let cur = cur_page.0 as f32 + cur_focal_y.clamp(0.0, 1.0);
+    portals.iter().min_by(|a, b| {
+        let score = |portal: &PortalLink| -> f32 {
+            let p = portal.src_page.0 as f32 + portal.src_focal_y.clamp(0.0, 1.0);
+            let diff = cur - p;
+            let raw = diff.abs();
+            if (-0.20..=1.20).contains(&diff) {
+                raw - 0.30
+            } else {
+                raw
+            }
+        };
+        score(a).total_cmp(&score(b)).then_with(|| a.id.cmp(&b.id))
+    })
+}
+
 /// Bounded per-viewport back/forward reading jump stack.
 #[derive(Clone, Debug, Default)]
 pub struct JumpHistory {
@@ -278,5 +314,38 @@ mod tests {
 
         let fwd1 = hist.go_forward(back2).unwrap();
         assert_eq!(fwd1.page, PageIndex(2));
+    }
+
+    #[test]
+    fn find_active_portal_switches_by_reading_position() {
+        let portals = vec![
+            PortalLink {
+                id: 1,
+                src_page: PageIndex(0),
+                src_focal_y: 0.25,
+                dst: ReadingAnchor {
+                    page: PageIndex(4),
+                    focal_norm: NormPoint::new(0.5, 0.1),
+                    zoom: ZoomSpec::FitWidth,
+                },
+                label: "Fig 1".to_string(),
+            },
+            PortalLink {
+                id: 2,
+                src_page: PageIndex(2),
+                src_focal_y: 0.40,
+                dst: ReadingAnchor {
+                    page: PageIndex(6),
+                    focal_norm: NormPoint::new(0.5, 0.2),
+                    zoom: ZoomSpec::FitWidth,
+                },
+                label: "Theorem 3".to_string(),
+            },
+        ];
+
+        assert_eq!(find_active_portal(&portals, PageIndex(0), 0.30).unwrap().id, 1);
+        assert_eq!(find_active_portal(&portals, PageIndex(2), 0.55).unwrap().id, 2);
+        assert_eq!(find_active_portal(&portals, PageIndex(3), 0.10).unwrap().id, 2);
+        assert!(find_active_portal(&[], PageIndex(0), 0.0).is_none());
     }
 }

@@ -317,6 +317,10 @@ fn build_annot_dict_and_ap(
         dict.set("Contents", encode_pdf_string(note));
     }
 
+    if let Some(cat) = ann.category {
+        dict.set("Subj", Object::string_literal(format!("pinleaf-cat:{cat}")));
+    }
+
     if matches!(
         ann.kind,
         AnnotationKind::Highlight | AnnotationKind::Underline | AnnotationKind::StrikeOut

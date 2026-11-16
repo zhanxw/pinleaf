@@ -1,0 +1,246 @@
+{
+  "fps": 30,
+  "transitionFrames": 12,
+  "videos": {
+    "FreezeAndPortals": {
+      "id": "FreezeAndPortals",
+      "filename": "01-freeze-and-portals.mp4",
+      "episode": "01 / 05",
+      "title": "Freeze-and-Branch & Scroll Portals",
+      "subtitle": "Pin source context, spawn multi-pane trails, and link figures dynamically",
+      "accent": "#34d399",
+      "totalFrames": 901,
+      "durationSeconds": 30.03,
+      "scenes": [
+        {
+          "id": "v1_s1",
+          "sceneTitle": "Freeze & Split Right",
+          "shortcutBadge": "F  /  \u2318D",
+          "caption": "Reading dense papers means jumping constantly. Pinleaf lets you freeze your active pane with F, or split right with Command D.",
+          "audioFile": "audio/v1_s1.mp3",
+          "audioSeconds": 7.5,
+          "durationInFrames": 231
+        },
+        {
+          "id": "v1_s2",
+          "sceneTitle": "Multi-Generation Reading Trail",
+          "shortcutBadge": "\u21e7\u2318D  \u2022  \u21e7\u2318N  \u2022  \u2325\u2318W",
+          "caption": "Branch deeper with Split Down, new windows, or Detach Pane. Clicking Theorem 2 in a frozen pane smart-routes the active descendant.",
+          "audioFile": "audio/v1_s2.mp3",
+          "audioSeconds": 8.241,
+          "durationInFrames": 254
+        },
+        {
+          "id": "v1_s3",
+          "sceneTitle": "Scroll-Linked Portals",
+          "shortcutBadge": "P  \u2022  \u21e7P  \u2022  \u2325P",
+          "caption": "Scroll-Linked Portals bind any reading paragraph to a figure or equation with P. Toggle a Portal Follower pane with Shift P.",
+          "audioFile": "audio/v1_s3.mp3",
+          "audioSeconds": 7.229,
+          "durationInFrames": 223
+        },
+        {
+          "id": "v1_s4",
+          "sceneTitle": "Automatic Follower Sync",
+          "shortcutBadge": "LibraryStore",
+          "caption": "As you scroll down the paper, your follower pane updates automatically from Figure 1 to Equation 4 and persists per document.",
+          "audioFile": "audio/v1_s4.mp3",
+          "audioSeconds": 7.431,
+          "durationInFrames": 229
+        }
+      ]
+    },
+    "NavigationSmartJumpHints": {
+      "id": "NavigationSmartJumpHints",
+      "filename": "02-navigation-smart-jump-hints.mp4",
+      "episode": "02 / 05",
+      "title": "Smart Jump, Hints & Navigation",
+      "subtitle": "Command Palette, unlinked ref resolution, Vimium hints, TOC & regex search",
+      "accent": "#60a5fa",
+      "totalFrames": 1074,
+      "durationSeconds": 35.8,
+      "scenes": [
+        {
+          "id": "v2_s1",
+          "sceneTitle": "Instant Command Palette",
+          "shortcutBadge": "/  or  ?",
+          "caption": "Press Slash or Question Mark anytime to open the Command Palette. Type keywords to filter actions and inspect platform shortcuts instantly.",
+          "audioFile": "audio/v2_s1.mp3",
+          "audioSeconds": 8.315,
+          "durationInFrames": 256
+        },
+        {
+          "id": "v2_s2",
+          "sceneTitle": "Heuristic Smart Jump & Overview",
+          "shortcutBadge": "Click  \u2022  Right-Click",
+          "caption": "Heuristic Smart Jump resolves unlinked labels like Figure 1, Theorem 1, or Citation 12. Right-click opens a floating Overview card.",
+          "audioFile": "audio/v2_s2.mp3",
+          "audioSeconds": 9.085,
+          "durationInFrames": 279
+        },
+        {
+          "id": "v2_s3",
+          "sceneTitle": "Vimium 2-Letter Hints",
+          "shortcutBadge": ";  \u2022  :  \u2022  V",
+          "caption": "Stay completely keyboard-driven with Vimium two-letter hints. Semicolon jumps links, Colon opens Overview previews, and V selects text between two words.",
+          "audioFile": "audio/v2_s3.mp3",
+          "audioSeconds": 10.003,
+          "durationInFrames": 307
+        },
+        {
+          "id": "v2_s4",
+          "sceneTitle": "Auto-TOC, Regex Search & Marks",
+          "shortcutBadge": "T  \u2022  \u2318F  \u2022  m / `  \u2022  \u2318[",
+          "caption": "Explore with Auto-TOC on T, regex search via Command F, single-key marks with m and backtick, jump history, and Vim scrolling.",
+          "audioFile": "audio/v2_s4.mp3",
+          "audioSeconds": 8.731,
+          "durationInFrames": 268
+        }
+      ]
+    },
+    "AnnotationsCategoriesLibrary": {
+      "id": "AnnotationsCategoriesLibrary",
+      "filename": "03-annotations-categories-library.mp4",
+      "episode": "03 / 05",
+      "title": "PDF Annotations, 26 Categories & Library",
+      "subtitle": "Standard ISO-32000 /Annots persistence, typed highlight buckets & cross-PDF search",
+      "accent": "#fbbf24",
+      "totalFrames": 1099,
+      "durationSeconds": 36.63,
+      "scenes": [
+        {
+          "id": "v3_s1",
+          "sceneTitle": "Standard PDF /Annots Writing",
+          "shortcutBadge": "\u2318H  \u2022  \u2318M  \u2022  A  \u2022  \u2318S",
+          "caption": "Select text cleanly across two columns to highlight, attach inline notes, underline, or frame figures. Command S saves standard PDF annotations atomically.",
+          "audioFile": "audio/v3_s1.mp3",
+          "audioSeconds": 10.677,
+          "durationInFrames": 327
+        },
+        {
+          "id": "v3_s2",
+          "sceneTitle": "26 Typed Highlight Categories",
+          "shortcutBadge": "H + a\u2013z",
+          "caption": "Organize thoughts into twenty-six typed highlight buckets using H plus a through z, persisted inside the PDF and customizable in config JSON.",
+          "audioFile": "audio/v3_s2.mp3",
+          "audioSeconds": 8.958,
+          "durationInFrames": 275
+        },
+        {
+          "id": "v3_s3",
+          "sceneTitle": "Notes Sidebar & Category Filters",
+          "shortcutBadge": "\u21e7\u2318A",
+          "caption": "Toggle the Notes Sidebar with Shift Command A. Filter your highlights live by category badge to isolate Theorems, Methods, or Open Questions.",
+          "audioFile": "audio/v3_s3.mp3",
+          "audioSeconds": 8.643,
+          "durationInFrames": 266
+        },
+        {
+          "id": "v3_s4",
+          "sceneTitle": "Global Search & DOI Lookup",
+          "shortcutBadge": "\u2318P  \u2022  \u21e7\u2318F  \u2022  \u21e7\u2318K",
+          "caption": "Switch papers instantly with Quick-Open Recent, search quotes across your entire library with Shift Command F, or look up DOIs on Google Scholar.",
+          "audioFile": "audio/v3_s4.mp3",
+          "audioSeconds": 8.668,
+          "durationInFrames": 267
+        }
+      ]
+    },
+    "ThemesComfortPresentation": {
+      "id": "ThemesComfortPresentation",
+      "filename": "04-themes-comfort-presentation.mp4",
+      "episode": "04 / 05",
+      "title": "Smart Dark Mode, Comfort & Presentation",
+      "subtitle": "Figure-preserving dark & custom themes, content fit, ruler, auto-scroll & F5 slides",
+      "accent": "#c084fc",
+      "totalFrames": 1061,
+      "durationSeconds": 35.37,
+      "scenes": [
+        {
+          "id": "v4_s1",
+          "sceneTitle": "4 Reading Themes + Custom Palette",
+          "shortcutBadge": "F8",
+          "caption": "Cycle through Light, Dark, Warm Sepia, and Custom palette modes with F8. Custom background and foreground hex colors live in your config file.",
+          "audioFile": "audio/v4_s1.mp3",
+          "audioSeconds": 9.26,
+          "durationInFrames": 284
+        },
+        {
+          "id": "v4_s2",
+          "sceneTitle": "Smart Dark Figure Preservation",
+          "shortcutBadge": "\u21e7F8",
+          "caption": "Shift F8 toggles Smart Dark Figure Preservation. Pinleaf detects raster plots and diagrams so charts keep crisp natural colors inside dark mode.",
+          "audioFile": "audio/v4_s2.mp3",
+          "audioSeconds": 9.175,
+          "durationInFrames": 282
+        },
+        {
+          "id": "v4_s3",
+          "sceneTitle": "Content Fit, Ruler & Auto-Scroll",
+          "shortcutBadge": "F10 / W  \u2022  R  \u2022  F6",
+          "caption": "Crop whitespace with W for Content Width, track dense lines using the Visual Reading Ruler on R, and toggle smooth auto-scroll with F6.",
+          "audioFile": "audio/v4_s3.mp3",
+          "audioSeconds": 8.826,
+          "durationInFrames": 271
+        },
+        {
+          "id": "v4_s4",
+          "sceneTitle": "Fullscreen Presentation Mode",
+          "shortcutBadge": "F5  \u2022  Esc",
+          "caption": "Need to present slides? Press F5 for chrome-free fullscreen Presentation Mode that fits whole pages cleanly, and hit Escape to return.",
+          "audioFile": "audio/v4_s4.mp3",
+          "audioSeconds": 8.44,
+          "durationInFrames": 260
+        }
+      ]
+    },
+    "SynctexIpcExtensions": {
+      "id": "SynctexIpcExtensions",
+      "filename": "05-synctex-ipc-extensions.mp4",
+      "episode": "05 / 05",
+      "title": "SyncTeX, CLI IPC & Extensions",
+      "subtitle": "Live LaTeX/Typst auto-reload, two-way SyncTeX, Unix socket IPC & shell extensions",
+      "accent": "#22d3ee",
+      "totalFrames": 1078,
+      "durationSeconds": 35.93,
+      "scenes": [
+        {
+          "id": "v5_s1",
+          "sceneTitle": "Live LaTeX / Typst Auto-Reload",
+          "shortcutBadge": "800 ms Auto-Reload",
+          "caption": "Pinleaf watches your compiled PDF on disk and reloads edits automatically while keeping every scroll anchor, zoom level, and split pane intact.",
+          "audioFile": "audio/v5_s1.mp3",
+          "audioSeconds": 8.616,
+          "durationInFrames": 265
+        },
+        {
+          "id": "v5_s2",
+          "sceneTitle": "Pure-Rust Two-Way SyncTeX",
+          "shortcutBadge": "--synctex-forward  \u2022  \u21e7\u2318J",
+          "caption": "Built-in pure Rust SyncTeX powers instant two-way jumping. Forward search highlights compiled lines in cyan, and Command Click jumps back to your editor.",
+          "audioFile": "audio/v5_s2.mp3",
+          "audioSeconds": 9.03,
+          "durationInFrames": 277
+        },
+        {
+          "id": "v5_s3",
+          "sceneTitle": "Unix Domain Socket CLI IPC",
+          "shortcutBadge": "--execute-command",
+          "caption": "Script live windows over a private Unix domain socket. Run execute-command from any terminal to jump pages, split panes, or run searches.",
+          "audioFile": "audio/v5_s3.mp3",
+          "audioSeconds": 9.075,
+          "durationInFrames": 279
+        },
+        {
+          "id": "v5_s4",
+          "sceneTitle": "Shell & Python Extensions",
+          "shortcutBadge": "\u21e7\u2318E",
+          "caption": "Press Shift Command E or custom hotkeys to run shell or Python extensions, safely passing selected quotes, DOIs, and paths to external workflows.",
+          "audioFile": "audio/v5_s4.mp3",
+          "audioSeconds": 9.534,
+          "durationInFrames": 293
+        }
+      ]
+    }
+  }
+}

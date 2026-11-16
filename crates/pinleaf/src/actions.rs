@@ -9,9 +9,10 @@ pub const COMMAND_POPUP_CONTEXT: &str = "PinleafCommandPopup";
 pub const SEARCH_BAR_CONTEXT: &str = "PinleafSearchBar";
 pub const OVERLAY_POPUP_CONTEXT: &str = "PinleafOverlayPopup";
 pub const MARK_PENDING_CONTEXT: &str = "PinleafMarkPending";
+pub const HINT_MODE_CONTEXT: &str = "PinleafHintMode";
 
-const APP_NO_INPUT: &str = "PinleafApp && !PinleafNoteEditor && !PinleafCommandPopup && !PinleafSearchBar && !PinleafOverlayPopup && !PinleafMarkPending";
-const VIEWPORT_NO_INPUT: &str = "PinleafViewport && !PinleafNoteEditor && !PinleafCommandPopup && !PinleafSearchBar && !PinleafOverlayPopup && !PinleafMarkPending";
+const APP_NO_INPUT: &str = "PinleafApp && !PinleafNoteEditor && !PinleafCommandPopup && !PinleafSearchBar && !PinleafOverlayPopup && !PinleafMarkPending && !PinleafHintMode";
+const VIEWPORT_NO_INPUT: &str = "PinleafViewport && !PinleafNoteEditor && !PinleafCommandPopup && !PinleafSearchBar && !PinleafOverlayPopup && !PinleafMarkPending && !PinleafHintMode";
 
 actions!(
     pinleaf,
@@ -62,6 +63,20 @@ actions!(
         BeginSetMark,
         BeginJumpMark,
         ToggleAreaMode,
+        LinkPortal,
+        TogglePortalFollower,
+        DeleteNearestPortal,
+        BeginHintJump,
+        BeginHintOverview,
+        BeginHintSelect,
+        BeginTypedHighlight,
+        SynctexInverseJump,
+        OpenExtensionsPopup,
+        ToggleSmartDarkMode,
+        TogglePresentationMode,
+        ToggleAutoScroll,
+        AutoScrollFaster,
+        AutoScrollSlower,
     ]
 );
 
@@ -127,6 +142,22 @@ pub fn register_keybindings(cx: &mut gpui::App) {
         KeyBinding::new("`", BeginJumpMark, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("'", BeginJumpMark, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("a", ToggleAreaMode, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("p", LinkPortal, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("shift-p", TogglePortalFollower, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("alt-p", DeleteNearestPortal, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new(";", BeginHintJump, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("shift-;", BeginHintOverview, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new(":", BeginHintOverview, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("v", BeginHintSelect, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("h", BeginTypedHighlight, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("secondary-shift-j", SynctexInverseJump, Some(VIEWPORT_CONTEXT)),
+        KeyBinding::new("secondary-shift-e", OpenExtensionsPopup, Some(APP_CONTEXT)),
+        KeyBinding::new("shift-f8", ToggleSmartDarkMode, Some(APP_CONTEXT)),
+        KeyBinding::new("f5", TogglePresentationMode, Some(APP_CONTEXT)),
+        KeyBinding::new("f6", ToggleAutoScroll, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("alt-=", AutoScrollFaster, Some(VIEWPORT_CONTEXT)),
+        KeyBinding::new("alt-+", AutoScrollFaster, Some(VIEWPORT_CONTEXT)),
+        KeyBinding::new("alt--", AutoScrollSlower, Some(VIEWPORT_CONTEXT)),
     ]);
 
     let custom_keys = cx.global::<AppRegistry>().user_config.keybindings.clone();
@@ -182,6 +213,40 @@ pub fn register_keybindings(cx: &mut gpui::App) {
                     Some(APP_NO_INPUT),
                 ));
             }
+            "link_portal" => {
+                custom_bindings.push(KeyBinding::new(&key_spec, LinkPortal, Some(VIEWPORT_NO_INPUT)));
+            }
+            "hint_jump" => {
+                custom_bindings.push(KeyBinding::new(&key_spec, BeginHintJump, Some(VIEWPORT_NO_INPUT)));
+            }
+            "typed_highlight" => {
+                custom_bindings.push(KeyBinding::new(
+                    &key_spec,
+                    BeginTypedHighlight,
+                    Some(VIEWPORT_NO_INPUT),
+                ));
+            }
+            "toggle_presentation" => {
+                custom_bindings.push(KeyBinding::new(
+                    &key_spec,
+                    TogglePresentationMode,
+                    Some(APP_NO_INPUT),
+                ));
+            }
+            "toggle_autoscroll" => {
+                custom_bindings.push(KeyBinding::new(
+                    &key_spec,
+                    ToggleAutoScroll,
+                    Some(VIEWPORT_NO_INPUT),
+                ));
+            }
+            "extensions" => {
+                custom_bindings.push(KeyBinding::new(
+                    &key_spec,
+                    OpenExtensionsPopup,
+                    Some(APP_NO_INPUT),
+                ));
+            }
             _ => {}
         }
     }
@@ -217,8 +282,11 @@ pub fn install_app_menus(cx: &mut gpui::App) {
             MenuItem::separator(),
             MenuItem::action("Copy Selection", CopySelection),
             MenuItem::action("Highlight Selection", HighlightSelection),
+            MenuItem::action("Typed Highlight Category (h + a-z)…", BeginTypedHighlight),
             MenuItem::action("Highlight with Note", AnnotateWithNote),
             MenuItem::action("Lookup in Google Scholar", LookupScholar),
+            MenuItem::action("SyncTeX Jump to Source", SynctexInverseJump),
+            MenuItem::action("Extensions & Commands…", OpenExtensionsPopup),
         ]),
         Menu::new("View").items([
             MenuItem::action("Search in Document…", OpenSearch),
@@ -232,12 +300,21 @@ pub fn install_app_menus(cx: &mut gpui::App) {
             MenuItem::action("Freeze & Open New Window", FreezeAndNewWindow),
             MenuItem::action("Detach Pane to Window", DetachPaneToWindow),
             MenuItem::separator(),
+            MenuItem::action("Link Scroll Portal", LinkPortal),
+            MenuItem::action("Toggle Portal Follower Pane", TogglePortalFollower),
+            MenuItem::action("Keyboard Hint Jump", BeginHintJump),
+            MenuItem::action("Keyboard Hint Overview", BeginHintOverview),
+            MenuItem::action("Keyboard Hint Text Select", BeginHintSelect),
+            MenuItem::separator(),
             MenuItem::action("Zoom In", ZoomIn),
             MenuItem::action("Zoom Out", ZoomOut),
             MenuItem::action("Fit Page Width", ZoomFitWidth),
             MenuItem::action("Fit Content Margins", ZoomFitContentWidth),
             MenuItem::action("Cycle Color Mode", CycleColorMode),
+            MenuItem::action("Toggle Smart Dark Figure Preservation", ToggleSmartDarkMode),
             MenuItem::action("Toggle Reading Ruler", ToggleReadingRuler),
+            MenuItem::action("Toggle Auto-Scroll", ToggleAutoScroll),
+            MenuItem::action("Presentation Mode", TogglePresentationMode),
         ]),
     ]);
 }
@@ -270,6 +347,22 @@ mod tests {
             "'",
             "secondary-n",
             "secondary-q",
+            "p",
+            "shift-p",
+            "alt-p",
+            ";",
+            "shift-;",
+            ":",
+            "v",
+            "h",
+            "secondary-shift-j",
+            "secondary-shift-e",
+            "shift-f8",
+            "f5",
+            "f6",
+            "alt-=",
+            "alt-+",
+            "alt--",
         ] {
             assert!(Keystroke::parse(raw).is_ok(), "failed to parse {raw}");
         }
@@ -293,6 +386,7 @@ mod tests {
             SEARCH_BAR_CONTEXT,
             OVERLAY_POPUP_CONTEXT,
             MARK_PENDING_CONTEXT,
+            HINT_MODE_CONTEXT,
         ] {
             let blocked_stack = [
                 KeyContext::parse(APP_CONTEXT).unwrap(),

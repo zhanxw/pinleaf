@@ -1,7 +1,7 @@
 use lopdf::{Dictionary, Document, Object, ObjectId};
 use pinleaf_core::{
     Annotation, AnnotationId, AnnotationKind, NormPoint, NormQuad, NormRect, PageIndex,
-    PageTransform, PdfPoint, RgbaColor,
+    PageTransform, PdfPoint, RgbaColor, normalize_category_char,
 };
 use thiserror::Error;
 
@@ -142,6 +142,13 @@ fn parse_annotation_dict(
         .and_then(|o| decode_pdf_string(deref(doc, o)))
         .unwrap_or_default();
 
+    let category = dict
+        .get(b"Subj")
+        .ok()
+        .and_then(|o| decode_pdf_string(deref(doc, o)))
+        .and_then(|s| s.strip_prefix("pinleaf-cat:").and_then(|c| c.chars().next()))
+        .and_then(normalize_category_char);
+
     // Preserve a readable point-order fallback if a quad was empty.
     let _ = NormPoint::new(0.0, 0.0);
 
@@ -153,6 +160,7 @@ fn parse_annotation_dict(
         quads,
         bounds,
         color,
+        category,
         selected_text: None,
         note_contents,
         modified_at,

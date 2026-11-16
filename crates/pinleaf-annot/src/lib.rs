@@ -57,6 +57,7 @@ mod tests {
             quads: vec![NormQuad::from_rect(p2_rect)],
             bounds: p2_rect,
             color: RgbaColor::GREEN,
+            category: Some('t'),
             selected_text: Some("Theorem 1".into()),
             note_contents: Some("Check Lemma 2 — α + β".into()),
             modified_at: "D:20261116103500Z".into(),
@@ -73,6 +74,7 @@ mod tests {
             quads: vec![NormQuad::from_rect(p1_ul_rect)],
             bounds: p1_ul_rect,
             color: RgbaColor::BLUE,
+            category: None,
             selected_text: Some("1. Introduction".into()),
             note_contents: None,
             modified_at: "D:20261116103501Z".into(),
@@ -88,6 +90,7 @@ mod tests {
             quads: vec![],
             bounds: p3_area_rect,
             color: RgbaColor::ORANGE,
+            category: None,
             selected_text: None,
             note_contents: Some("Diagram box #1".into()),
             modified_at: "D:20261116103502Z".into(),
@@ -103,6 +106,7 @@ mod tests {
             quads: vec![NormQuad::from_rect(p5_rect)],
             bounds: p5_rect,
             color: RgbaColor::PINK,
+            category: None,
             selected_text: Some("Rotated Landscape Appendix".into()),
             note_contents: Some("Landscape check".into()),
             modified_at: "D:20261116103503Z".into(),
@@ -128,6 +132,7 @@ mod tests {
         assert!(reloaded_annots.iter().all(|a| a.id != orig_id));
 
         let reloaded_p2 = reloaded_annots.iter().find(|a| a.id == p2_hl_id).unwrap();
+        assert_eq!(reloaded_p2.category, Some('t'));
         assert_eq!(
             reloaded_p2.note_contents.as_deref(),
             Some("Check Lemma 2 — α + β")

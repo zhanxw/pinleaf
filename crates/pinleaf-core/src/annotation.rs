@@ -72,6 +72,46 @@ impl RgbaColor {
     }
 }
 
+pub fn normalize_category_char(ch: char) -> Option<char> {
+    if ch.is_ascii_alphabetic() {
+        Some(ch.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+pub fn highlight_category_spec(ch: char) -> (&'static str, RgbaColor) {
+    match ch.to_ascii_lowercase() {
+        'a' => ("Assumption", RgbaColor::rgb(0.96, 0.84, 0.34)),
+        'b' => ("Background", RgbaColor::rgb(0.64, 0.78, 0.96)),
+        'c' => ("Claim", RgbaColor::rgb(0.98, 0.62, 0.42)),
+        'd' => ("Definition", RgbaColor::rgb(0.45, 0.85, 0.78)),
+        'e' => ("Equation", RgbaColor::rgb(0.76, 0.64, 0.98)),
+        'f' => ("Figure", RgbaColor::rgb(0.54, 0.88, 0.56)),
+        'g' => ("Goal", RgbaColor::rgb(0.96, 0.78, 0.30)),
+        'h' => ("Highlight", RgbaColor::YELLOW),
+        'i' => ("Important", RgbaColor::rgb(0.99, 0.48, 0.48)),
+        'j' => ("Note", RgbaColor::rgb(0.84, 0.86, 0.90)),
+        'k' => ("Key Idea", RgbaColor::rgb(1.0, 0.82, 0.28)),
+        'l' => ("Limitation", RgbaColor::rgb(0.95, 0.54, 0.68)),
+        'm' => ("Method", RgbaColor::rgb(0.44, 0.76, 0.98)),
+        'n' => ("Novelty", RgbaColor::rgb(0.62, 0.92, 0.46)),
+        'o' => ("Observation", RgbaColor::rgb(0.98, 0.72, 0.48)),
+        'p' => ("Problem", RgbaColor::rgb(0.96, 0.46, 0.56)),
+        'q' => ("Question", RgbaColor::rgb(0.88, 0.60, 0.96)),
+        'r' => ("Result", RgbaColor::rgb(0.40, 0.86, 0.54)),
+        's' => ("Summary", RgbaColor::rgb(0.56, 0.86, 0.94)),
+        't' => ("Theorem", RgbaColor::rgb(0.46, 0.66, 0.98)),
+        'u' => ("Open Issue", RgbaColor::rgb(0.96, 0.64, 0.36)),
+        'v' => ("Verification", RgbaColor::rgb(0.50, 0.90, 0.72)),
+        'w' => ("Related Work", RgbaColor::rgb(0.74, 0.78, 0.96)),
+        'x' => ("Counterexample", RgbaColor::rgb(0.98, 0.42, 0.42)),
+        'y' => ("Hypothesis", RgbaColor::rgb(0.92, 0.74, 0.96)),
+        'z' => ("Takeaway", RgbaColor::rgb(0.98, 0.86, 0.38)),
+        _ => ("Highlight", RgbaColor::YELLOW),
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AnnotationKind {
     Highlight,
@@ -93,6 +133,8 @@ pub struct Annotation {
     pub quads: Vec<NormQuad>,
     pub bounds: NormRect,
     pub color: RgbaColor,
+    /// Optional single-letter highlight category (`a`..`z`), persisted in PDF `/Subj (pinleaf-cat:<ch>)`.
+    pub category: Option<char>,
     pub selected_text: Option<String>,
     pub note_contents: Option<String>,
     pub modified_at: String,
@@ -217,7 +259,21 @@ impl AnnotationStore {
         let Some(existing) = self.items.get(&id).cloned() else {
             return false;
         };
+        self.update_category_and_color(id, existing.category, color, modified_at)
+    }
+
+    pub fn update_category_and_color(
+        &mut self,
+        id: AnnotationId,
+        category: Option<char>,
+        color: RgbaColor,
+        modified_at: String,
+    ) -> bool {
+        let Some(existing) = self.items.get(&id).cloned() else {
+            return false;
+        };
         let mut after = existing.clone();
+        after.category = category.and_then(normalize_category_char);
         after.color = color;
         after.modified_at = modified_at;
         self.items.insert(id, after.clone());
@@ -415,6 +471,7 @@ mod tests {
             quads: vec![NormQuad::from_rect(bounds)],
             bounds,
             color: RgbaColor::YELLOW,
+            category: None,
             selected_text: Some("sample quote".to_string()),
             note_contents: None,
             modified_at: "D:20261116100000Z".to_string(),
@@ -457,5 +514,17 @@ mod tests {
         store.mark_saved(&[(added_id, (99, 0))]);
         assert!(!store.is_dirty());
         assert_eq!(store.get(added_id).unwrap().pdf_object_id, Some((99, 0)));
+    }
+
+    #[test]
+    fn highlight_categories_cover_a_to_z() {
+        for ch in 'a'..='z' {
+            let norm = normalize_category_char(ch.to_ascii_uppercase()).unwrap();
+            assert_eq!(norm, ch);
+            let (label, color) = highlight_category_spec(ch);
+            assert!(!label.is_empty());
+            assert!(color.a > 0.0);
+        }
+        assert!(normalize_category_char('5').is_none());
     }
 }

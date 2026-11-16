@@ -1,6 +1,9 @@
 /target/
 /dist/
 /assets/Pinleaf.iconset/
+/videos/remotion-explainer/node_modules/
+/videos/remotion-explainer/.remotion/
+/videos/out/
 .DS_Store
 *.swp
 *.swo

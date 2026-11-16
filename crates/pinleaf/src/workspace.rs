@@ -4,25 +4,30 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyWindowHandle, App, Axis, Bounds, Context, Entity, FocusHandle, FontWeight,
-    KeyDownEvent, MouseButton, MouseMoveEvent, PathPromptOptions, Pixels, Render, Subscription,
-    TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, img, prelude::*, px, rgb,
-    rgba, size,
+    AnyElement, AnyWindowHandle, App, Axis, Bounds, ClipboardItem, Context, Entity, FocusHandle,
+    FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseMoveEvent, PathPromptOptions, Pixels,
+    Render, Subscription, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, img,
+    prelude::*, px, rgb, rgba, size,
 };
-use pinleaf_core::{AnnotationId, AnnotationKind, FreezeState, PageIndex, ReadingAnchor, ViewportId};
+use pinleaf_core::{
+    AnnotationId, AnnotationKind, FreezeState, PageIndex, ReadingAnchor, ViewportId, ZoomSpec,
+    find_active_portal, highlight_category_spec,
+};
 use pinleaf_engine::filter_toc;
 
 use crate::actions::{
     APP_CONTEXT, COMMAND_POPUP_CONTEXT, CycleColorMode, NextSearchMatch, OVERLAY_POPUP_CONTEXT,
-    OpenDemo, OpenFile, OpenGlobalHighlightsPopup, OpenRecentPopup, OpenSearch, PrevSearchMatch,
-    RedoAnnot, SEARCH_BAR_CONTEXT, SavePdf, SavePdfAs, ToggleAutoReload, ToggleCommandPopup,
-    ToggleSidebar, ToggleTocPopup, UndoAnnot,
+    OpenDemo, OpenExtensionsPopup, OpenFile, OpenGlobalHighlightsPopup, OpenRecentPopup,
+    OpenSearch, PrevSearchMatch, RedoAnnot, SEARCH_BAR_CONTEXT, SavePdf, SavePdfAs,
+    ToggleAutoReload, ToggleCommandPopup, TogglePresentationMode, ToggleSidebar,
+    ToggleSmartDarkMode, ToggleTocPopup, UndoAnnot,
 };
-use crate::app_state::{AppRegistry, navigate_viewport_globally};
+use crate::app_state::{AppRegistry, navigate_viewport_globally, sync_portal_followers};
 use crate::command_popup::{CommandEntry, CommandId, filter_commands};
+use crate::external::run_shell_extension_blocking;
 use crate::library::{GlobalHighlightHit, IndexedHighlight, matches_highlight};
 use crate::session::{ColorMode, DocumentSession};
-use crate::viewport::{PdfViewport, ViewportEvent};
+use crate::viewport::{HintModeKind, PdfViewport, ViewportEvent};
 
 pub enum SplitNode {
     Leaf {
@@ -208,6 +213,7 @@ impl SplitNode {
 enum LibraryModalKind {
     RecentDocs,
     GlobalHighlights,
+    Extensions,
 }
 
 #[derive(Clone)]
@@ -217,6 +223,7 @@ struct LibraryRowItem {
     badge: String,
     target_path: Option<PathBuf>,
     target_page: PageIndex,
+    extension_cmd: Option<String>,
 }
 
 pub struct WindowWorkspace {
@@ -224,6 +231,9 @@ pub struct WindowWorkspace {
     root: SplitNode,
     focused_viewport: ViewportId,
     sidebar_open: bool,
+    sidebar_category_filter: Option<char>,
+    presentation_mode: bool,
+    pre_presentation_zoom: Option<ZoomSpec>,
     command_popup_open: bool,
     command_query: String,
     selected_command_idx: usize,
@@ -312,6 +322,9 @@ impl WindowWorkspace {
             root: SplitNode::Leaf { viewport },
             focused_viewport: vp_id,
             sidebar_open: false,
+            sidebar_category_filter: None,
+            presentation_mode: false,
+            pre_presentation_zoom: None,
             command_popup_open: false,
             command_query: String::new(),
             selected_command_idx: 0,
@@ -375,6 +388,25 @@ impl WindowWorkspace {
                 top_norm_y,
             } => {
                 ws.smart_route_link(source_id, page, top_norm_y, cx);
+            }
+            ViewportEvent::ReadingPositionChanged {
+                id,
+                page,
+                focal_y,
+            } => {
+                let sess = ws.session.clone();
+                cx.spawn(async move |_, cx| {
+                    cx.update(|cx| {
+                        sync_portal_followers(&sess, id, page, focal_y, cx);
+                    });
+                })
+                .detach();
+            }
+            ViewportEvent::RequestEnsurePortalFollower { source_id, dst } => {
+                ws.ensure_portal_follower_for(source_id, dst, cx);
+            }
+            ViewportEvent::RequestTogglePortalFollower(id) => {
+                ws.toggle_portal_follower(id, cx);
             }
         })
     }
@@ -548,6 +580,142 @@ impl WindowWorkspace {
                 vp.navigate_to_page_offset(page, top_norm_y.unwrap_or(0.0), cx);
             });
         }
+    }
+
+    fn toggle_portal_follower(&mut self, target_id: ViewportId, cx: &mut Context<Self>) {
+        let Some(target_vp) = self.root.find_viewport(target_id, cx) else {
+            return;
+        };
+        let was_follower = target_vp.read(cx).portal_follower;
+        if !was_follower && self.root.leaf_count() == 1 {
+            let src_anchor = target_vp.read(cx).anchor;
+            let dst_anchor = {
+                let s = self.session.read(cx);
+                find_active_portal(&s.portals, src_anchor.page, src_anchor.focal_norm.y)
+                    .map(|p| p.dst)
+                    .unwrap_or(src_anchor)
+            };
+            self.spawn_portal_split(target_id, dst_anchor, cx);
+            return;
+        }
+        target_vp.update(cx, |vp, cx| {
+            vp.portal_follower = !was_follower;
+            if !vp.portal_follower {
+                vp.active_portal_label = None;
+            }
+            cx.notify();
+        });
+        let now_follower = !was_follower;
+        self.session.update(cx, |s, cx| {
+            s.status_message = Some((
+                format!(
+                    "Portal follower: {}",
+                    if now_follower { "ON" } else { "OFF" }
+                ),
+                false,
+            ));
+            cx.notify();
+        });
+    }
+
+    fn ensure_portal_follower_for(
+        &mut self,
+        source_id: ViewportId,
+        dst: ReadingAnchor,
+        cx: &mut Context<Self>,
+    ) {
+        let has_follower = cx.global::<AppRegistry>().viewports.iter().any(|(&id, entry)| {
+            if id == source_id {
+                return false;
+            }
+            entry
+                .viewport
+                .upgrade()
+                .is_some_and(|vp| {
+                    let v = vp.read(cx);
+                    v.session == self.session && v.portal_follower
+                })
+        });
+        if has_follower {
+            let sess = self.session.clone();
+            let (cur_page, cur_y) = {
+                let vp = self.active_viewport_entity(cx);
+                let a = vp.read(cx).anchor;
+                (a.page, a.focal_norm.y)
+            };
+            cx.spawn(async move |_, cx| {
+                cx.update(|cx| {
+                    sync_portal_followers(&sess, source_id, cur_page, cur_y, cx);
+                });
+            })
+            .detach();
+            return;
+        }
+        self.spawn_portal_split(source_id, dst, cx);
+    }
+
+    fn spawn_portal_split(
+        &mut self,
+        source_id: ViewportId,
+        dst: ReadingAnchor,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(window_handle) = cx
+            .global::<AppRegistry>()
+            .viewports
+            .get(&source_id)
+            .map(|e| e.window)
+        else {
+            return;
+        };
+        let child = self.spawn_child_viewport(source_id, dst, window_handle, cx);
+        let portal_label = {
+            let s = self.session.read(cx);
+            s.portals.last().map(|p| p.label.clone())
+        };
+        child.update(cx, |vp, _| {
+            vp.portal_follower = true;
+            vp.active_portal_label = portal_label;
+            vp.hide_header = self.presentation_mode;
+        });
+
+        let split_id = self.next_split_id;
+        self.next_split_id += 1;
+        self.root
+            .replace_leaf_with_split(source_id, split_id, Axis::Horizontal, child, cx);
+        self.sync_current_session_library(cx);
+        cx.notify();
+    }
+
+    pub fn toggle_presentation_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.presentation_mode = !self.presentation_mode;
+        if window.is_fullscreen() != self.presentation_mode {
+            window.toggle_fullscreen();
+        }
+        let mut vps = Vec::new();
+        self.root.all_viewports(&mut vps);
+        for vp in &vps {
+            vp.update(cx, |vp, cx| {
+                vp.hide_header = self.presentation_mode;
+                cx.notify();
+            });
+        }
+        let active = self.active_viewport_entity(cx);
+        if self.presentation_mode {
+            self.sidebar_open = false;
+            self.pre_presentation_zoom = Some(active.read(cx).anchor.zoom);
+            active.update(cx, |vp, cx| {
+                vp.anchor.zoom = ZoomSpec::FitPage;
+                vp.pan_x = 0.0;
+                cx.notify();
+            });
+        } else if let Some(prev) = self.pre_presentation_zoom.take() {
+            active.update(cx, |vp, cx| {
+                vp.anchor.zoom = prev;
+                cx.notify();
+            });
+        }
+        cx.notify();
     }
 
     fn active_viewport_entity(&self, cx: &App) -> Entity<PdfViewport> {
@@ -738,7 +906,33 @@ impl WindowWorkspace {
                 vp.update(cx, |vp, cx| vp.zoom_fit_content_width(cx));
             }
             CommandId::CycleColorMode => self.session.update(cx, |s, cx| s.cycle_color_mode(cx)),
+            CommandId::ToggleSmartDarkMode => {
+                self.session.update(cx, |s, cx| s.toggle_smart_dark_mode(cx));
+            }
             CommandId::ToggleReadingRuler => vp.update(cx, |vp, cx| vp.toggle_reading_ruler(cx)),
+            CommandId::ToggleAutoScroll => vp.update(cx, |vp, cx| vp.toggle_auto_scroll(cx)),
+            CommandId::TogglePresentationMode => self.toggle_presentation_mode(window, cx),
+            CommandId::LinkPortal => vp.update(cx, |vp, cx| vp.link_portal(cx)),
+            CommandId::TogglePortalFollower => self.toggle_portal_follower(vp_id, cx),
+            CommandId::DeleteNearestPortal => vp.update(cx, |vp, cx| vp.delete_nearest_portal(cx)),
+            CommandId::BeginHintJump => {
+                vp.update(cx, |vp, cx| vp.begin_hint_mode(HintModeKind::Jump, cx));
+            }
+            CommandId::BeginHintOverview => {
+                vp.update(cx, |vp, cx| vp.begin_hint_mode(HintModeKind::Overview, cx));
+            }
+            CommandId::BeginHintSelect => {
+                vp.update(cx, |vp, cx| vp.begin_hint_mode(HintModeKind::SelectStart, cx));
+            }
+            CommandId::BeginTypedHighlight => {
+                vp.update(cx, |vp, cx| vp.begin_typed_highlight(cx));
+            }
+            CommandId::SynctexInverseJump => {
+                vp.update(cx, |vp, cx| vp.synctex_inverse_here(cx));
+            }
+            CommandId::OpenExtensionsPopup => {
+                self.open_library_modal(LibraryModalKind::Extensions, window, cx);
+            }
             CommandId::LookupScholar => vp.update(cx, |vp, cx| vp.lookup_selection_scholar(cx)),
             CommandId::OpenRecentPopup => {
                 self.open_library_modal(LibraryModalKind::RecentDocs, window, cx);
@@ -1012,8 +1206,71 @@ impl WindowWorkspace {
                     badge: format!("p.{}", doc.last_page + 1),
                     target_path: Some(doc.path.clone()),
                     target_page: PageIndex(doc.last_page),
+                    extension_cmd: None,
                 })
                 .collect(),
+            LibraryModalKind::Extensions => {
+                let query = self.library_query.trim().to_ascii_lowercase();
+                let mut rows: Vec<LibraryRowItem> = reg
+                    .user_config
+                    .extensions
+                    .iter()
+                    .map(|ext| LibraryRowItem {
+                        title: ext.name.clone(),
+                        subtitle: ext.command.clone(),
+                        badge: ext.key.clone().unwrap_or_else(|| "User".to_string()),
+                        target_path: None,
+                        target_page: PageIndex(0),
+                        extension_cmd: Some(ext.command.clone()),
+                    })
+                    .collect();
+
+                let builtins = [
+                    (
+                        "Copy Markdown Citation",
+                        "__pinleaf_copy_cite__",
+                        "Built-in",
+                    ),
+                    (
+                        "Copy Quote to Clipboard",
+                        "printf '%s' {selected_text} | pbcopy",
+                        "Built-in",
+                    ),
+                    (
+                        "Speak Selection / Line (macOS say)",
+                        "say {selected_text}",
+                        "macOS",
+                    ),
+                    (
+                        "Reveal PDF in Finder",
+                        "open -R {file_path}",
+                        "macOS",
+                    ),
+                    (
+                        "SyncTeX Jump to TeX Source",
+                        "__pinleaf_synctex__",
+                        "⇧⌘J",
+                    ),
+                ];
+                for (name, cmd, badge) in builtins {
+                    rows.push(LibraryRowItem {
+                        title: name.to_string(),
+                        subtitle: cmd.to_string(),
+                        badge: badge.to_string(),
+                        target_path: None,
+                        target_page: PageIndex(0),
+                        extension_cmd: Some(cmd.to_string()),
+                    });
+                }
+
+                if !query.is_empty() {
+                    rows.retain(|r| {
+                        r.title.to_ascii_lowercase().contains(&query)
+                            || r.subtitle.to_ascii_lowercase().contains(&query)
+                    });
+                }
+                rows
+            }
             LibraryModalKind::GlobalHighlights => {
                 let s = self.session.read(cx);
                 let cur_canon = s
@@ -1068,6 +1325,7 @@ impl WindowWorkspace {
                             badge: format!("p.{}", h.page_one_based),
                             target_path: h.path,
                             target_page: PageIndex(h.page_one_based.saturating_sub(1)),
+                            extension_cmd: None,
                         }
                     })
                     .collect()
@@ -1075,18 +1333,70 @@ impl WindowWorkspace {
         }
     }
 
+    fn run_extension_command(
+        &mut self,
+        cmd_template: String,
+        cx: &mut Context<Self>,
+    ) {
+        if cmd_template == "__pinleaf_synctex__" {
+            self.active_viewport_entity(cx)
+                .update(cx, |vp, cx| vp.synctex_inverse_here(cx));
+            return;
+        }
+        let ext_ctx = self
+            .active_viewport_entity(cx)
+            .update(cx, |vp, cx| vp.current_extension_context(cx));
+        if cmd_template == "__pinleaf_copy_cite__" {
+            let doc_title = self.session.read(cx).title.clone();
+            let cite = if ext_ctx.selected_text.is_empty() {
+                format!("{doc_title} (p.{})", ext_ctx.page_one_based)
+            } else {
+                format!(
+                    "\"{}\" — {doc_title} (p.{})",
+                    ext_ctx.selected_text, ext_ctx.page_one_based
+                )
+            };
+            cx.write_to_clipboard(ClipboardItem::new_string(cite));
+            self.session.update(cx, |s, cx| {
+                s.status_message = Some(("Copied citation to clipboard".to_string(), false));
+                cx.notify();
+            });
+            return;
+        }
+
+        let session = self.session.clone();
+        cx.spawn(async move |_, cx| {
+            let outcome = cx
+                .background_spawn(async move {
+                    run_shell_extension_blocking(&cmd_template, &ext_ctx)
+                })
+                .await;
+            let _ = session.update(cx, |s, cx| {
+                s.status_message = Some(match outcome {
+                    Ok(msg) => (msg, false),
+                    Err(err) => (err, true),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn activate_library_item(
         &mut self,
-        target_path: Option<PathBuf>,
-        target_page: PageIndex,
+        item: &LibraryRowItem,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.close_library_modal(window, cx);
-        if let Some(path) = target_path {
-            self.open_or_switch_path_at_page(path, target_page, cx);
+        if let Some(ref ext_cmd) = item.extension_cmd {
+            self.run_extension_command(ext_cmd.clone(), cx);
+            return;
+        }
+        if let Some(ref path) = item.target_path {
+            self.open_or_switch_path_at_page(path.clone(), item.target_page, cx);
         } else {
-            self.navigate_focused_or_smart_route(target_page, 0.0, cx);
+            self.navigate_focused_or_smart_route(item.target_page, 0.0, cx);
         }
     }
 
@@ -1131,7 +1441,7 @@ impl WindowWorkspace {
         }
         if ks.key == "enter" {
             if let Some(item) = items.get(self.library_selected_idx.min(len.saturating_sub(1))) {
-                self.activate_library_item(item.target_path.clone(), item.target_page, window, cx);
+                self.activate_library_item(item, window, cx);
             }
             return;
         }
@@ -1394,7 +1704,7 @@ impl WindowWorkspace {
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let items = self
+        let all_items = self
             .session
             .read(cx)
             .annotations
@@ -1402,6 +1712,28 @@ impl WindowWorkspace {
             .into_iter()
             .cloned()
             .collect::<Vec<_>>();
+
+        let mut cat_counts: Vec<(char, usize)> = Vec::new();
+        for ann in &all_items {
+            if let Some(c) = ann.category {
+                if let Some(entry) = cat_counts.iter_mut().find(|(ch, _)| *ch == c) {
+                    entry.1 += 1;
+                } else {
+                    cat_counts.push((c, 1));
+                }
+            }
+        }
+        cat_counts.sort_by_key(|(c, _)| *c);
+
+        let total_count = all_items.len();
+        let active_filter = self.sidebar_category_filter;
+        let items: Vec<_> = match active_filter {
+            Some(cat) => all_items
+                .into_iter()
+                .filter(|a| a.category == Some(cat))
+                .collect(),
+            None => all_items,
+        };
 
         div()
             .w(px(270.))
@@ -1417,10 +1749,78 @@ impl WindowWorkspace {
                     .py_2()
                     .border_b_1()
                     .border_color(rgb(0xe4e4e7))
-                    .text_xs()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(rgb(0x18181b))
-                    .child(format!("Annotations ({})", items.len())),
+                    .flex()
+                    .flex_col()
+                    .gap_1p5()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(0x18181b))
+                            .child(format!("Annotations ({}/{})", items.len(), total_count)),
+                    )
+                    .when(!cat_counts.is_empty(), |hdr| {
+                        hdr.child(
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .id("sb-cat-all")
+                                        .px_1p5()
+                                        .py_0p5()
+                                        .rounded_sm()
+                                        .cursor_pointer()
+                                        .text_xs()
+                                        .bg(if active_filter.is_none() {
+                                            rgb(0x2563eb)
+                                        } else {
+                                            rgb(0xe4e4e7)
+                                        })
+                                        .text_color(if active_filter.is_none() {
+                                            rgb(0xffffff)
+                                        } else {
+                                            rgb(0x27272a)
+                                        })
+                                        .child("All")
+                                        .on_click(cx.listener(|ws, _, _, cx| {
+                                            ws.sidebar_category_filter = None;
+                                            cx.notify();
+                                        })),
+                                )
+                                .children(cat_counts.into_iter().map(|(cat, count)| {
+                                    let is_active = active_filter == Some(cat);
+                                    let (lbl, _) = highlight_category_spec(cat);
+                                    div()
+                                        .id(("sb-cat", cat as u64))
+                                        .px_1p5()
+                                        .py_0p5()
+                                        .rounded_sm()
+                                        .cursor_pointer()
+                                        .text_xs()
+                                        .bg(if is_active {
+                                            rgb(0x2563eb)
+                                        } else {
+                                            rgb(0xe4e4e7)
+                                        })
+                                        .text_color(if is_active {
+                                            rgb(0xffffff)
+                                        } else {
+                                            rgb(0x27272a)
+                                        })
+                                        .child(format!("{cat}:{lbl} ({count})"))
+                                        .on_click(cx.listener(move |ws, _, _, cx| {
+                                            ws.sidebar_category_filter = if is_active {
+                                                None
+                                            } else {
+                                                Some(cat)
+                                            };
+                                            cx.notify();
+                                        }))
+                                })),
+                        )
+                    }),
             )
             .child(
                 div()
@@ -1437,7 +1837,7 @@ impl WindowWorkspace {
                                 .p_3()
                                 .text_xs()
                                 .text_color(rgb(0x71717a))
-                                .child("Drag over text to highlight, or Alt+Drag over diagrams to add Area Notes."),
+                                .child("Drag over text to highlight, or press H + [a-z] for a typed category."),
                         )
                     })
                     .children(items.into_iter().enumerate().map(|(idx, ann)| {
@@ -1448,6 +1848,10 @@ impl WindowWorkspace {
                             AnnotationKind::AreaNote => "Area",
                             AnnotationKind::StickyNote => "Note",
                         };
+                        let cat_badge = ann.category.map(|c| {
+                            let (lbl, _) = highlight_category_spec(c);
+                            format!("[{c}: {lbl}]")
+                        });
                         let page_num = ann.page.one_based();
                         let quote = ann.selected_text.clone().unwrap_or_default();
                         let note = ann.note_contents.clone().unwrap_or_default();
@@ -1484,7 +1888,10 @@ impl WindowWorkspace {
                                                 div()
                                                     .font_weight(FontWeight::SEMIBOLD)
                                                     .text_color(rgb(0x27272a))
-                                                    .child(kind_label),
+                                                    .child(match cat_badge {
+                                                        Some(b) => format!("{kind_label} {b}"),
+                                                        None => kind_label.to_string(),
+                                                    }),
                                             ),
                                     )
                                     .child(div().text_color(rgb(0x71717a)).child(format!("p.{page_num}"))),
@@ -2305,6 +2712,11 @@ impl WindowWorkspace {
                 "Search highlights & notes across all opened PDFs...",
                 "No matching highlights or notes across indexed documents.",
             ),
+            LibraryModalKind::Extensions => (
+                "Extensions & External Commands",
+                "Filter configured shell/Python extensions and tools...",
+                "No matching extensions.",
+            ),
         };
         let query_is_empty = self.library_query.is_empty();
         let query_display = if query_is_empty {
@@ -2327,8 +2739,7 @@ impl WindowWorkspace {
         } else {
             for (idx, item) in items.into_iter().enumerate() {
                 let is_selected = selected_idx == Some(idx);
-                let target_path = item.target_path;
-                let target_page = item.target_page;
+                let item_click = item.clone();
                 rows.push(
                     div()
                         .id(("lib-row", idx))
@@ -2360,12 +2771,7 @@ impl WindowWorkspace {
                         })
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .on_click(cx.listener(move |this, _, window, cx| {
-                            this.activate_library_item(
-                                target_path.clone(),
-                                target_page,
-                                window,
-                                cx,
-                            );
+                            this.activate_library_item(&item_click, window, cx);
                         }))
                         .child(
                             div()
@@ -2514,6 +2920,128 @@ impl WindowWorkspace {
                     ),
             )
     }
+
+    pub fn focus_synctex_forward(
+        &mut self,
+        tex_path: &std::path::Path,
+        line: u32,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let loc_opt = self
+            .session
+            .update(cx, |s, cx| s.apply_synctex_forward(tex_path, line, cx));
+        if let Some(loc) = loc_opt {
+            self.navigate_focused_or_smart_route(loc.page, (loc.rect.min_y - 48.0).max(0.0), cx);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn execute_ipc_command(
+        &mut self,
+        command: &str,
+        args: &[String],
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<String, String> {
+        let vp = self.active_viewport_entity(cx);
+        let vp_id = vp.read(cx).id;
+        match command {
+            "next_page" => vp.update(cx, |vp, cx| vp.next_page(cx)),
+            "prev_page" => vp.update(cx, |vp, cx| vp.prev_page(cx)),
+            "first_page" => vp.update(cx, |vp, cx| vp.go_first_page(cx)),
+            "last_page" => vp.update(cx, |vp, cx| vp.go_last_page(cx)),
+            "goto_page" => {
+                let page_num: u32 = args
+                    .first()
+                    .ok_or_else(|| "goto_page requires 1-based page number".to_string())?
+                    .parse()
+                    .map_err(|e| format!("invalid page number: {e}"))?;
+                self.navigate_focused_or_smart_route(
+                    PageIndex(page_num.saturating_sub(1)),
+                    0.0,
+                    cx,
+                );
+            }
+            "zoom_in" => vp.update(cx, |vp, cx| vp.zoom_in(cx)),
+            "zoom_out" => vp.update(cx, |vp, cx| vp.zoom_out(cx)),
+            "fit_width" => vp.update(cx, |vp, cx| vp.zoom_fit_width(cx)),
+            "fit_content" => vp.update(cx, |vp, cx| vp.zoom_fit_content_width(cx)),
+            "cycle_color_mode" => self.session.update(cx, |s, cx| s.cycle_color_mode(cx)),
+            "toggle_smart_dark" => self.session.update(cx, |s, cx| s.toggle_smart_dark_mode(cx)),
+            "toggle_freeze" => vp.update(cx, |vp, cx| vp.toggle_freeze(cx)),
+            "split_right" => {
+                self.freeze_and_split(vp_id, Axis::Horizontal, cx);
+            }
+            "split_down" => {
+                self.freeze_and_split(vp_id, Axis::Vertical, cx);
+            }
+            "toggle_portal_follower" => self.toggle_portal_follower(vp_id, cx),
+            "toggle_presentation" => self.toggle_presentation_mode(window, cx),
+            "toggle_autoscroll" => vp.update(cx, |vp, cx| vp.toggle_auto_scroll(cx)),
+            "search" => {
+                let query = args.join(" ");
+                self.session.update(cx, |s, cx| s.update_search(query, false, cx));
+                if let Some((p, y)) = self.session.read(cx).current_search_match() {
+                    self.navigate_focused_or_smart_route(p, (y - 36.0).max(0.0), cx);
+                }
+            }
+            "reload" => {
+                self.session.update(cx, |s, cx| {
+                    s.force_reload_from_disk(cx);
+                });
+            }
+            "quit" => cx.quit(),
+            other => return Err(format!("unknown IPC command: {other}")),
+        }
+        Ok(format!("executed {command}"))
+    }
+
+    fn handle_workspace_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.presentation_mode
+            && event.keystroke.key == "escape"
+            && !self.command_popup_open
+            && !self.toc_popup_open
+            && self.library_modal.is_none()
+            && !self.search_bar_open
+        {
+            self.toggle_presentation_mode(window, cx);
+            cx.stop_propagation();
+            return;
+        }
+
+        if self.command_popup_open
+            || self.toc_popup_open
+            || self.library_modal.is_some()
+            || self.search_bar_open
+        {
+            return;
+        }
+
+        let matched_cmd = {
+            let exts = &cx.global::<AppRegistry>().user_config.extensions;
+            exts.iter().find_map(|ext| {
+                let raw_key = ext.key.as_deref()?;
+                let parsed = Keystroke::parse(raw_key).ok()?;
+                if parsed.key == event.keystroke.key && parsed.modifiers == event.keystroke.modifiers
+                {
+                    Some(ext.command.clone())
+                } else {
+                    None
+                }
+            })
+        };
+        if let Some(cmd) = matched_cmd {
+            self.run_extension_command(cmd, cx);
+            cx.stop_propagation();
+        }
+    }
 }
 
 impl Render for WindowWorkspace {
@@ -2578,12 +3106,22 @@ impl Render for WindowWorkspace {
             .on_action(cx.listener(|this, _: &OpenGlobalHighlightsPopup, window, cx| {
                 this.toggle_library_modal(LibraryModalKind::GlobalHighlights, window, cx);
             }))
+            .on_action(cx.listener(|this, _: &OpenExtensionsPopup, window, cx| {
+                this.toggle_library_modal(LibraryModalKind::Extensions, window, cx);
+            }))
             .on_action(cx.listener(|this, _: &ToggleAutoReload, _, cx| {
                 this.session.update(cx, |s, cx| s.toggle_auto_reload(cx));
             }))
             .on_action(cx.listener(|this, _: &CycleColorMode, _, cx| {
                 this.session.update(cx, |s, cx| s.cycle_color_mode(cx));
             }))
+            .on_action(cx.listener(|this, _: &ToggleSmartDarkMode, _, cx| {
+                this.session.update(cx, |s, cx| s.toggle_smart_dark_mode(cx));
+            }))
+            .on_action(cx.listener(|this, _: &TogglePresentationMode, window, cx| {
+                this.toggle_presentation_mode(window, cx);
+            }))
+            .on_key_down(cx.listener(Self::handle_workspace_key_down))
             .on_drop(cx.listener(|this, dropped: &gpui::ExternalPaths, window, cx| {
                 let files: Vec<PathBuf> = dropped
                     .paths()
@@ -2636,7 +3174,9 @@ impl Render for WindowWorkspace {
                     this.active_split_drag = None;
                 }),
             )
-            .child(self.render_toolbar(cx))
+            .when(!self.presentation_mode, |root| {
+                root.child(self.render_toolbar(cx))
+            })
             .when(self.search_bar_open, |root| {
                 root.child(self.render_search_bar(cx))
             })

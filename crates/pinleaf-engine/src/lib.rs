@@ -4,15 +4,17 @@ pub mod links;
 pub mod rasterizer;
 pub mod search;
 pub mod smart_jump;
+pub mod synctex;
 pub mod text_device;
 pub mod text_layout;
 pub mod toc;
 
 pub use document::{EngineError, PageMeta, PdfDocumentHandle};
 pub use links::{LinkRegion, LinkTarget, extract_all_links};
-pub use rasterizer::{BgraFrame, render_page_bgra};
+pub use rasterizer::{BgraFrame, extract_page_image_rects, render_page_bgra};
 pub use search::{SearchMatch, search_layouts};
-pub use smart_jump::{SmartTarget, resolve_smart_jump_at};
+pub use smart_jump::{LineSmartRef, SmartTarget, collect_page_smart_refs, resolve_smart_jump_at};
+pub use synctex::{SyncTexMap, SyncTexPdfLoc, SyncTexSourceLoc};
 pub use text_layout::{GlyphSpan, PageTextLayout, TextLine, extract_page_text};
 pub use toc::{TocEntry, extract_toc, filter_toc};
 

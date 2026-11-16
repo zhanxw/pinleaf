@@ -11,19 +11,24 @@ use gpui::{
 use pinleaf_core::{
     Annotation, AnnotationId, AnnotationKind, FreezeState, JumpHistory, NormPoint, NormQuad,
     NormRect, PageCharPos, PageIndex, ReadingAnchor, RgbaColor, TextSelectionRange, ViewportId,
-    ZoomSpec, annotation::pdf_now_string,
+    ZoomSpec, annotation::pdf_now_string, highlight_category_spec, normalize_category_char,
 };
-use pinleaf_engine::{LinkRegion, LinkTarget, resolve_smart_jump_at};
+use pinleaf_engine::{
+    LinkRegion, LinkTarget, collect_page_smart_refs, resolve_smart_jump_at,
+};
 
 use crate::actions::{
-    AnnotateWithNote, BeginJumpMark, BeginSetMark, ClosePane, CopySelection, DetachPaneToWindow,
-    FirstPage, FreezeAndNewWindow, FreezeAndSplitDown, FreezeAndSplitRight, HighlightSelection,
-    JumpBack, JumpForward, LastPage, LookupScholar, MARK_PENDING_CONTEXT, NOTE_EDITOR_CONTEXT,
-    NextPage, PrevPage, ScrollHalfPageDown, ScrollHalfPageUp, ScrollLineDown, ScrollLineUp,
-    ToggleAreaMode, ToggleFreeze, ToggleReadingRuler, VIEWPORT_CONTEXT, ZoomFitContentWidth,
-    ZoomFitWidth, ZoomIn, ZoomOut,
+    AnnotateWithNote, AutoScrollFaster, AutoScrollSlower, BeginHintJump, BeginHintOverview,
+    BeginHintSelect, BeginJumpMark, BeginSetMark, BeginTypedHighlight, ClosePane, CopySelection,
+    DeleteNearestPortal, DetachPaneToWindow, FirstPage, FreezeAndNewWindow, FreezeAndSplitDown,
+    FreezeAndSplitRight, HINT_MODE_CONTEXT, HighlightSelection, JumpBack, JumpForward, LastPage,
+    LinkPortal, LookupScholar, MARK_PENDING_CONTEXT, NOTE_EDITOR_CONTEXT, NextPage, PrevPage,
+    ScrollHalfPageDown, ScrollHalfPageUp, ScrollLineDown, ScrollLineUp, SynctexInverseJump,
+    ToggleAreaMode, ToggleAutoScroll, ToggleFreeze, TogglePortalFollower, ToggleReadingRuler,
+    VIEWPORT_CONTEXT, ZoomFitContentWidth, ZoomFitWidth, ZoomIn, ZoomOut,
 };
 use crate::app_state::{AppRegistry, focus_viewport_globally};
+use crate::external::{ExtensionContext, extract_first_doi, run_synctex_inverse_editor};
 use crate::session::{ColorMode, DocumentSession, scale_to_zoom_bucket};
 
 const PAGE_GAP_PX: f32 = 16.0;
@@ -42,6 +47,16 @@ pub enum ViewportEvent {
         page: PageIndex,
         top_norm_y: Option<f32>,
     },
+    ReadingPositionChanged {
+        id: ViewportId,
+        page: PageIndex,
+        focal_y: f32,
+    },
+    RequestEnsurePortalFollower {
+        source_id: ViewportId,
+        dst: ReadingAnchor,
+    },
+    RequestTogglePortalFollower(ViewportId),
 }
 
 #[derive(Clone, Debug)]
@@ -73,6 +88,57 @@ enum DragMode {
 enum PendingMarkOp {
     Set,
     Jump,
+    TypedHighlight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HintModeKind {
+    Jump,
+    Overview,
+    SelectStart,
+    SelectEnd { start: PageCharPos },
+}
+
+#[derive(Clone, Debug)]
+enum HintAction {
+    InternalJump { page: PageIndex, top_norm_y: f32, label: String },
+    ExternalUrl(String),
+    SelectChar(PageCharPos),
+}
+
+#[derive(Clone, Debug)]
+struct HintCandidate {
+    label: String,
+    page: PageIndex,
+    rect: NormRect,
+    action: HintAction,
+}
+
+#[derive(Clone, Debug)]
+struct HintModeState {
+    kind: HintModeKind,
+    typed: String,
+    candidates: Vec<HintCandidate>,
+}
+
+const HINT_ALPHABET: &[u8] = b"asdfghjklqwertyuiopzxcvbnm";
+
+/// Generates unique home-row-first 2-letter keyboard hint labels (`aa`, `as`, `ad`, ...).
+pub fn generate_hint_labels(count: usize) -> Vec<String> {
+    let mut out = Vec::with_capacity(count);
+    let len = HINT_ALPHABET.len();
+    for i in 0..count {
+        if i >= len * len {
+            break;
+        }
+        let a = HINT_ALPHABET[i / len] as char;
+        let b = HINT_ALPHABET[i % len] as char;
+        let mut s = String::with_capacity(2);
+        s.push(a);
+        s.push(b);
+        out.push(s);
+    }
+    out
 }
 
 #[derive(Clone, Debug)]
@@ -88,6 +154,9 @@ pub struct PdfViewport {
     pub session: Entity<DocumentSession>,
     pub anchor: ReadingAnchor,
     pub freeze_state: FreezeState,
+    pub portal_follower: bool,
+    pub active_portal_label: Option<String>,
+    pub hide_header: bool,
     pub pan_x: f32,
     pub jump_history: JumpHistory,
     focus_handle: FocusHandle,
@@ -97,12 +166,15 @@ pub struct PdfViewport {
     selection: Option<TextSelectionRange>,
     area_mode: bool,
     pending_mark_op: Option<PendingMarkOp>,
+    hint_mode: Option<HintModeState>,
     ruler_line: Option<(PageIndex, usize)>,
     overview_preview: Option<OverviewPreview>,
     hovered_link: Option<(PageIndex, usize)>,
     inspected_annotation: Option<AnnotationId>,
     editing_note: Option<(AnnotationId, String)>,
     frozen_feedback_active: bool,
+    auto_scroll_speed: Option<f32>,
+    auto_scroll_loop_active: bool,
     _session_obs: gpui::Subscription,
 }
 
@@ -124,6 +196,9 @@ impl PdfViewport {
             session,
             anchor,
             freeze_state,
+            portal_follower: false,
+            active_portal_label: None,
+            hide_header: false,
             pan_x: 0.0,
             jump_history: JumpHistory::default(),
             focus_handle,
@@ -133,12 +208,15 @@ impl PdfViewport {
             selection: None,
             area_mode: false,
             pending_mark_op: None,
+            hint_mode: None,
             ruler_line: None,
             overview_preview: None,
             hovered_link: None,
             inspected_annotation: None,
             editing_note: None,
             frozen_feedback_active: false,
+            auto_scroll_speed: None,
+            auto_scroll_loop_active: false,
             _session_obs,
         }
     }
@@ -151,15 +229,19 @@ impl PdfViewport {
         self._session_obs = cx.observe(&session, |_, _, cx| cx.notify());
         self.session = session;
         self.anchor = ReadingAnchor::default();
+        self.portal_follower = false;
+        self.active_portal_label = None;
         self.pan_x = 0.0;
         self.jump_history = JumpHistory::default();
         self.selection = None;
         self.pending_mark_op = None;
+        self.hint_mode = None;
         self.ruler_line = None;
         self.overview_preview = None;
         self.inspected_annotation = None;
         self.editing_note = None;
         self.drag_mode = DragMode::None;
+        self.auto_scroll_speed = None;
         cx.notify();
     }
 
@@ -235,7 +317,18 @@ impl PdfViewport {
         self.anchor.page = clamped_page;
         self.anchor.focal_norm = NormPoint::new(0.5, (norm_y / page_h.max(1.0)).clamp(0.0, 0.95));
         self.pan_x = 0.0;
+        self.notify_reading_position_changed(cx);
         cx.notify();
+    }
+
+    fn notify_reading_position_changed(&self, cx: &mut Context<Self>) {
+        if !self.freeze_state.is_frozen() && !self.portal_follower {
+            cx.emit(ViewportEvent::ReadingPositionChanged {
+                id: self.id,
+                page: self.anchor.page,
+                focal_y: self.anchor.focal_norm.y,
+            });
+        }
     }
 
     pub fn jump_to_page_offset_recorded(
@@ -257,6 +350,7 @@ impl PdfViewport {
             self.anchor.page = target.page;
             self.anchor.focal_norm = target.focal_norm;
             self.pan_x = 0.0;
+            self.notify_reading_position_changed(cx);
             cx.notify();
         }
     }
@@ -270,6 +364,7 @@ impl PdfViewport {
             self.anchor.page = target.page;
             self.anchor.focal_norm = target.focal_norm;
             self.pan_x = 0.0;
+            self.notify_reading_position_changed(cx);
             cx.notify();
         }
     }
@@ -418,6 +513,7 @@ impl PdfViewport {
         let max_pan = ((active_pw + SIDE_MARGIN_PX * 2.0 - vw) * 0.5).max(0.0);
         self.pan_x = (self.pan_x + dx).clamp(-max_pan, max_pan);
 
+        self.notify_reading_position_changed(cx);
         cx.notify();
     }
 
@@ -444,6 +540,7 @@ impl PdfViewport {
         let next = (self.anchor.page.0 as i32 + delta).clamp(0, (count - 1) as i32) as u32;
         self.anchor.page = PageIndex(next);
         self.anchor.focal_norm = NormPoint::new(0.5, 0.0);
+        self.notify_reading_position_changed(cx);
         cx.notify();
     }
 
@@ -679,22 +776,558 @@ impl PdfViewport {
         self.begin_mark_op(PendingMarkOp::Jump, cx);
     }
 
+    pub fn begin_typed_highlight(&mut self, cx: &mut Context<Self>) {
+        if self.selection.is_none() && self.inspected_annotation.is_none() {
+            self.session.update(cx, |s, cx| {
+                s.status_message = Some((
+                    "Select text or click an annotation first, then press H + [a-z]".to_string(),
+                    false,
+                ));
+                cx.notify();
+            });
+            return;
+        }
+        self.begin_mark_op(PendingMarkOp::TypedHighlight, cx);
+    }
+
     fn begin_mark_op(&mut self, op: PendingMarkOp, cx: &mut Context<Self>) {
+        self.hint_mode = None;
         self.pending_mark_op = Some(op);
+        cx.notify();
+    }
+
+    pub fn link_portal(&mut self, cx: &mut Context<Self>) {
+        if let Some(ov) = self.overview_preview.take() {
+            let page_h = self
+                .session
+                .read(cx)
+                .page_metas
+                .get(ov.page.as_usize())
+                .map(|m| m.norm_height)
+                .unwrap_or(792.0);
+            let dst = ReadingAnchor {
+                page: ov.page,
+                focal_norm: NormPoint::new(0.5, (ov.top_norm_y / page_h.max(1.0)).clamp(0.0, 0.95)),
+                zoom: ZoomSpec::FitWidth,
+            };
+            let src_page = self.anchor.page;
+            let src_y = self.anchor.focal_norm.y;
+            self.session.update(cx, |s, cx| {
+                s.add_portal(src_page, src_y, dst, ov.label, cx);
+            });
+            cx.emit(ViewportEvent::RequestEnsurePortalFollower {
+                source_id: self.id,
+                dst,
+            });
+            cx.notify();
+            return;
+        }
+
+        let pending_src = self.session.read(cx).pending_portal_src;
+        match pending_src {
+            None => {
+                let src = (self.anchor.page, self.anchor.focal_norm.y);
+                self.session.update(cx, |s, cx| {
+                    s.pending_portal_src = Some(src);
+                    s.status_message = Some((
+                        format!(
+                            "Portal source armed at p.{} — scroll to figure/table and press P to link",
+                            src.0.one_based()
+                        ),
+                        false,
+                    ));
+                    cx.notify();
+                });
+            }
+            Some((src_page, src_y)) => {
+                let dst = self.anchor;
+                self.session.update(cx, |s, cx| {
+                    let label = format!("p.{} ref", dst.page.one_based());
+                    s.add_portal(src_page, src_y, dst, label, cx);
+                });
+                let src_page_h = self
+                    .session
+                    .read(cx)
+                    .page_metas
+                    .get(src_page.as_usize())
+                    .map(|m| m.norm_height)
+                    .unwrap_or(792.0);
+                self.navigate_to_page_offset(src_page, src_y * src_page_h, cx);
+                cx.emit(ViewportEvent::RequestEnsurePortalFollower {
+                    source_id: self.id,
+                    dst,
+                });
+            }
+        }
+    }
+
+    pub fn delete_nearest_portal(&mut self, cx: &mut Context<Self>) {
+        let p = self.anchor.page;
+        let fy = self.anchor.focal_norm.y;
+        self.session.update(cx, |s, cx| {
+            s.delete_nearest_portal(p, fy, cx);
+        });
+    }
+
+    pub fn toggle_auto_scroll(&mut self, cx: &mut Context<Self>) {
+        if self.freeze_state.is_frozen() {
+            self.flash_frozen_guard(cx);
+            return;
+        }
+        if self.auto_scroll_speed.is_some() {
+            self.auto_scroll_speed = None;
+            self.session.update(cx, |s, cx| {
+                s.status_message = Some(("Auto-scroll stopped".to_string(), false));
+                cx.notify();
+            });
+            cx.notify();
+            return;
+        }
+
+        let speed = 56.0_f32;
+        self.auto_scroll_speed = Some(speed);
+        self.session.update(cx, |s, cx| {
+            s.status_message = Some((
+                format!("Auto-scroll ON ({speed:.0} px/s — Alt+=/Alt+- speed, F6 stop)"),
+                false,
+            ));
+            cx.notify();
+        });
+        self.ensure_auto_scroll_loop(cx);
+        cx.notify();
+    }
+
+    pub fn adjust_auto_scroll_speed(&mut self, delta: f32, cx: &mut Context<Self>) {
+        let current = self.auto_scroll_speed.unwrap_or(48.0);
+        let next = (current + delta).clamp(16.0, 420.0);
+        self.auto_scroll_speed = Some(next);
+        self.session.update(cx, |s, cx| {
+            s.status_message = Some((format!("Auto-scroll speed: {next:.0} px/s"), false));
+            cx.notify();
+        });
+        self.ensure_auto_scroll_loop(cx);
+        cx.notify();
+    }
+
+    fn ensure_auto_scroll_loop(&mut self, cx: &mut Context<Self>) {
+        if self.auto_scroll_loop_active {
+            return;
+        }
+        self.auto_scroll_loop_active = true;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(16))
+                    .await;
+                let keep_going = this
+                    .update(cx, |vp, cx| {
+                        let Some(speed) = vp.auto_scroll_speed else {
+                            vp.auto_scroll_loop_active = false;
+                            return false;
+                        };
+                        if vp.freeze_state.is_frozen() {
+                            vp.auto_scroll_speed = None;
+                            vp.auto_scroll_loop_active = false;
+                            return false;
+                        }
+                        vp.apply_scroll_delta(0.0, -(speed * 0.016), cx);
+                        true
+                    })
+                    .unwrap_or(false);
+                if !keep_going {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    pub fn trigger_synctex_inverse_at(
+        &mut self,
+        page: PageIndex,
+        pt: NormPoint,
+        cx: &mut Context<Self>,
+    ) {
+        let synctex_opt = self.session.read(cx).synctex.clone();
+        let Some(synctex) = synctex_opt else {
+            self.session.update(cx, |s, cx| {
+                s.status_message = Some(("No .synctex.gz file found next to PDF".to_string(), true));
+                cx.notify();
+            });
+            return;
+        };
+        let Some(loc) = synctex.inverse_search(page, pt) else {
+            self.session.update(cx, |s, cx| {
+                s.status_message = Some(("No SyncTeX source match near cursor".to_string(), true));
+                cx.notify();
+            });
+            return;
+        };
+        let custom_cmd = cx.global::<AppRegistry>().user_config.inverse_search_command.clone();
+        let (msg, is_err) = run_synctex_inverse_editor(&loc, custom_cmd.as_deref());
+        self.session.update(cx, |s, cx| {
+            s.status_message = Some((msg, is_err));
+            cx.notify();
+        });
+    }
+
+    pub fn synctex_inverse_here(&mut self, cx: &mut Context<Self>) {
+        let (page, pt) = if let Some((rp, ridx)) = self.ruler_line {
+            let layout = self.session.update(cx, |s, _| s.ensure_text_layout(rp));
+            let center = layout
+                .lines
+                .get(ridx)
+                .map(|l| l.bounds.center())
+                .unwrap_or_else(|| NormPoint::new(200.0, 200.0));
+            (rp, center)
+        } else {
+            let meta = self
+                .session
+                .read(cx)
+                .page_metas
+                .get(self.anchor.page.as_usize())
+                .cloned();
+            let (pw, ph) = meta
+                .map(|m| (m.norm_width, m.norm_height))
+                .unwrap_or((612.0, 792.0));
+            let y = ((self.anchor.focal_norm.y + 0.15).clamp(0.0, 0.95)) * ph;
+            (self.anchor.page, NormPoint::new(pw * 0.35, y))
+        };
+        self.trigger_synctex_inverse_at(page, pt, cx);
+    }
+
+    pub fn current_extension_context(&mut self, cx: &mut App) -> ExtensionContext {
+        let selected_text = self.selected_text_string(cx);
+        let page = self.anchor.page;
+        let line_text = if let Some((rp, ridx)) = self.ruler_line {
+            let layout = self.session.update(cx, |s, _| s.ensure_text_layout(rp));
+            layout
+                .lines
+                .get(ridx)
+                .and_then(|l| {
+                    let first = layout.glyphs.get(l.span_range.start)?;
+                    let last = layout.glyphs.get(l.span_range.end.checked_sub(1)?)?;
+                    layout
+                        .full_text
+                        .get(first.byte_range.start..last.byte_range.end)
+                        .map(str::to_string)
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let file_path = self
+            .session
+            .read(cx)
+            .path
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let doi = extract_first_doi(&selected_text);
+        ExtensionContext {
+            file_path,
+            page_one_based: page.one_based(),
+            selected_text,
+            line_text,
+            doi,
+        }
+    }
+
+    pub fn begin_hint_mode(&mut self, kind: HintModeKind, cx: &mut Context<Self>) {
+        self.pending_mark_op = None;
+        let bounds = self.last_canvas_bounds.get();
+        let vw = bounds.size.width.as_f32().max(320.0);
+        let vh = bounds.size.height.as_f32().max(240.0);
+        let (scale, _, _, placements) = self.compute_layout(vw, vh, cx);
+        let visible: Vec<PagePlacement> = placements
+            .into_iter()
+            .filter(|p| p.local_y + p.pixel_h >= 0.0 && p.local_y <= vh)
+            .collect();
+
+        let layouts = if matches!(kind, HintModeKind::Jump | HintModeKind::Overview) {
+            Some(self.session.update(cx, |s, _| s.ensure_all_layouts_now()))
+        } else {
+            None
+        };
+
+        let mut raw_items: Vec<(PageIndex, NormRect, HintAction)> = Vec::new();
+        for p in &visible {
+            let vis_min_y = ((-p.local_y) / scale).clamp(0.0, p.norm_height);
+            let vis_max_y = ((vh - p.local_y) / scale).clamp(0.0, p.norm_height);
+
+            match kind {
+                HintModeKind::Jump | HintModeKind::Overview => {
+                    let links = self.session.read(cx).links_for_page(p.page).to_vec();
+                    for link in links {
+                        if link.rect.max_y < vis_min_y || link.rect.min_y > vis_max_y {
+                            continue;
+                        }
+                        let action = match link.target {
+                            LinkTarget::InternalPage { page, top_norm_y } => {
+                                HintAction::InternalJump {
+                                    page,
+                                    top_norm_y: top_norm_y.unwrap_or(0.0),
+                                    label: format!("Link -> p.{}", page.one_based()),
+                                }
+                            }
+                            LinkTarget::ExternalUrl(url) => HintAction::ExternalUrl(url),
+                        };
+                        raw_items.push((p.page, link.rect, action));
+                    }
+                    if let Some(ref all_layouts) = layouts {
+                        for r in collect_page_smart_refs(p.page, vis_min_y, vis_max_y, all_layouts)
+                        {
+                            let dup = raw_items
+                                .iter()
+                                .any(|(ep, er, _)| *ep == p.page && er.intersects(r.rect));
+                            if !dup {
+                                raw_items.push((
+                                    p.page,
+                                    r.rect,
+                                    HintAction::InternalJump {
+                                        page: r.target.page,
+                                        top_norm_y: (r.target.top_norm_y - 18.0).max(0.0),
+                                        label: r.target.label,
+                                    },
+                                ));
+                            }
+                        }
+                    }
+                }
+                HintModeKind::SelectStart | HintModeKind::SelectEnd { .. } => {
+                    let layout = self.session.update(cx, |s, _| s.ensure_text_layout(p.page));
+                    for line in &layout.lines {
+                        if line.bounds.max_y < vis_min_y || line.bounds.min_y > vis_max_y {
+                            continue;
+                        }
+                        let mut span_idx = line.span_range.start;
+                        while span_idx < line.span_range.end {
+                            while span_idx < line.span_range.end
+                                && layout.glyphs[span_idx].is_synthetic_space
+                            {
+                                span_idx += 1;
+                            }
+                            let word_start = span_idx;
+                            while span_idx < line.span_range.end {
+                                let g = &layout.glyphs[span_idx];
+                                let slice = &layout.full_text[g.byte_range.clone()];
+                                if g.is_synthetic_space || slice.chars().all(char::is_whitespace) {
+                                    break;
+                                }
+                                span_idx += 1;
+                            }
+                            let word_end = span_idx;
+                            if word_end > word_start {
+                                let chosen_idx = match kind {
+                                    HintModeKind::SelectEnd { .. } => word_end - 1,
+                                    _ => word_start,
+                                };
+                                let rect = layout.glyphs[word_start].rect;
+                                raw_items.push((
+                                    p.page,
+                                    rect,
+                                    HintAction::SelectChar(PageCharPos::new(p.page, chosen_idx)),
+                                ));
+                                if raw_items.len() >= 600 {
+                                    break;
+                                }
+                            }
+                        }
+                        if raw_items.len() >= 600 {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if raw_items.is_empty() {
+            self.hint_mode = None;
+            self.session.update(cx, |s, cx| {
+                s.status_message = Some(("No visible hint targets in viewport".to_string(), false));
+                cx.notify();
+            });
+            return;
+        }
+
+        raw_items.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| (a.1.min_y / 8.0).round().total_cmp(&(b.1.min_y / 8.0).round()))
+                .then_with(|| a.1.min_x.total_cmp(&b.1.min_x))
+        });
+        raw_items.truncate(HINT_ALPHABET.len() * HINT_ALPHABET.len());
+        let labels = generate_hint_labels(raw_items.len());
+        let candidates = raw_items
+            .into_iter()
+            .zip(labels)
+            .map(|((page, rect, action), label)| HintCandidate {
+                label,
+                page,
+                rect,
+                action,
+            })
+            .collect();
+
+        self.hint_mode = Some(HintModeState {
+            kind,
+            typed: String::new(),
+            candidates,
+        });
+        cx.notify();
+    }
+
+    fn execute_hint_candidate(
+        &mut self,
+        kind: HintModeKind,
+        cand: HintCandidate,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.hint_mode = None;
+        match kind {
+            HintModeKind::Jump => match cand.action {
+                HintAction::InternalJump {
+                    page, top_norm_y, ..
+                } => {
+                    self.overview_preview = None;
+                    self.follow_internal_target(page, top_norm_y, cx);
+                }
+                HintAction::ExternalUrl(url) => {
+                    let opened = crate::external::open_external_url(&url);
+                    self.session.update(cx, |s, cx| {
+                        s.status_message = Some((
+                            if opened {
+                                format!("Opened {url}")
+                            } else {
+                                format!("External URL: {url}")
+                            },
+                            !opened,
+                        ));
+                        cx.notify();
+                    });
+                }
+                HintAction::SelectChar(_) => {}
+            },
+            HintModeKind::Overview => match cand.action {
+                HintAction::InternalJump {
+                    page,
+                    top_norm_y,
+                    label,
+                } => {
+                    let bounds = self.last_canvas_bounds.get();
+                    let vw = bounds.size.width.as_f32().max(320.0);
+                    let vh = bounds.size.height.as_f32().max(240.0);
+                    let (scale, _, _, placements) = self.compute_layout(vw, vh, cx);
+                    let anchor_pt = placements
+                        .iter()
+                        .find(|p| p.page == cand.page)
+                        .map(|p| {
+                            point(
+                                bounds.origin.x + px(p.local_x + cand.rect.min_x * scale),
+                                bounds.origin.y + px(p.local_y + cand.rect.min_y * scale),
+                            )
+                        })
+                        .unwrap_or_else(|| point(bounds.origin.x + px(40.), bounds.origin.y + px(60.)));
+                    self.overview_preview = Some(OverviewPreview {
+                        label,
+                        page,
+                        top_norm_y,
+                        anchor_win_pt: anchor_pt,
+                    });
+                }
+                HintAction::ExternalUrl(url) => {
+                    let _ = crate::external::open_external_url(&url);
+                }
+                HintAction::SelectChar(_) => {}
+            },
+            HintModeKind::SelectStart => {
+                if let HintAction::SelectChar(start) = cand.action {
+                    self.begin_hint_mode(HintModeKind::SelectEnd { start }, cx);
+                }
+            }
+            HintModeKind::SelectEnd { start } => {
+                if let HintAction::SelectChar(end) = cand.action {
+                    self.selection = Some(TextSelectionRange::new(start, end));
+                    self.inspected_annotation = None;
+                    self.editing_note = None;
+                    window.focus(&self.focus_handle, cx);
+                }
+            }
+        }
         cx.notify();
     }
 
     fn handle_viewport_key_down(
         &mut self,
         event: &KeyDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let ks = &event.keystroke;
+
+        if self.hint_mode.is_some() {
+            cx.stop_propagation();
+            if ks.key == "escape" {
+                self.hint_mode = None;
+                cx.notify();
+                return;
+            }
+            if ks.key == "backspace" {
+                if let Some(ref mut hm) = self.hint_mode {
+                    if !hm.typed.is_empty() {
+                        hm.typed.pop();
+                    } else {
+                        self.hint_mode = None;
+                    }
+                    cx.notify();
+                }
+                return;
+            }
+            if !ks.modifiers.platform
+                && !ks.modifiers.control
+                && !ks.modifiers.alt
+                && let Some(ch_str) = &ks.key_char
+                && let Some(ch) = ch_str.chars().next()
+                && ch.is_ascii_alphabetic()
+            {
+                let lower = ch.to_ascii_lowercase();
+                let mut matched_exec: Option<(HintModeKind, HintCandidate)> = None;
+                let mut clear_hints = false;
+                if let Some(ref mut hm) = self.hint_mode {
+                    hm.typed.push(lower);
+                    let remaining: Vec<&HintCandidate> = hm
+                        .candidates
+                        .iter()
+                        .filter(|c| c.label.starts_with(&hm.typed))
+                        .collect();
+                    if remaining.is_empty() {
+                        clear_hints = true;
+                    } else if remaining.len() == 1 || remaining.iter().any(|c| c.label == hm.typed) {
+                        let chosen = remaining
+                            .iter()
+                            .find(|c| c.label == hm.typed)
+                            .copied()
+                            .unwrap_or(remaining[0])
+                            .clone();
+                        matched_exec = Some((hm.kind, chosen));
+                    }
+                }
+                if clear_hints {
+                    self.hint_mode = None;
+                    cx.notify();
+                } else if let Some((kind, chosen)) = matched_exec {
+                    self.execute_hint_candidate(kind, chosen, window, cx);
+                } else {
+                    cx.notify();
+                }
+            }
+            return;
+        }
+
         let Some(op) = self.pending_mark_op else {
             return;
         };
         cx.stop_propagation();
-        let ks = &event.keystroke;
         if ks.key == "escape" {
             self.pending_mark_op = None;
             cx.notify();
@@ -708,6 +1341,30 @@ impl PdfViewport {
         {
             self.pending_mark_op = None;
             match op {
+                PendingMarkOp::TypedHighlight => {
+                    if let Some(cat) = normalize_category_char(ch) {
+                        let (cat_label, color) =
+                            cx.global::<AppRegistry>().resolve_highlight_category(cat);
+                        if self.selection.is_some() {
+                            self.commit_text_annotation(
+                                AnnotationKind::Highlight,
+                                Some(cat),
+                                color,
+                                false,
+                                window,
+                                cx,
+                            );
+                        } else if let Some(ann_id) = self.inspected_annotation {
+                            self.session.update(cx, |s, cx| {
+                                s.update_annotation_category(ann_id, Some(cat), color, cx);
+                            });
+                        }
+                        self.session.update(cx, |s, cx| {
+                            s.status_message = Some((format!("Category [{cat}: {cat_label}]"), false));
+                            cx.notify();
+                        });
+                    }
+                }
                 PendingMarkOp::Set => {
                     let anchor = self.anchor;
                     self.session.update(cx, |s, cx| {
@@ -886,6 +1543,7 @@ impl PdfViewport {
     pub fn highlight_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.commit_text_annotation(
             AnnotationKind::Highlight,
+            None,
             RgbaColor::YELLOW,
             false,
             window,
@@ -896,6 +1554,7 @@ impl PdfViewport {
     pub fn underline_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.commit_text_annotation(
             AnnotationKind::Underline,
+            None,
             RgbaColor::BLUE,
             false,
             window,
@@ -906,6 +1565,7 @@ impl PdfViewport {
     pub fn strikeout_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.commit_text_annotation(
             AnnotationKind::StrikeOut,
+            None,
             RgbaColor::PINK,
             false,
             window,
@@ -916,6 +1576,7 @@ impl PdfViewport {
     pub fn annotate_selection_with_note(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.commit_text_annotation(
             AnnotationKind::Highlight,
+            None,
             RgbaColor::YELLOW,
             true,
             window,
@@ -926,6 +1587,7 @@ impl PdfViewport {
     fn commit_text_annotation(
         &mut self,
         kind: AnnotationKind,
+        category: Option<char>,
         color: RgbaColor,
         open_note_editor: bool,
         window: &mut Window,
@@ -956,6 +1618,7 @@ impl PdfViewport {
                 quads,
                 bounds,
                 color,
+                category,
                 selected_text: Some(full_quote.clone()),
                 note_contents: None,
                 modified_at: pdf_now_string(),
@@ -985,6 +1648,14 @@ impl PdfViewport {
         let Some((page, norm_pt, _)) = self.window_pos_to_page(event.position, cx) else {
             return;
         };
+
+        // SyncTeX inverse jump via Cmd+Click (or Ctrl+Click) when .synctex is present.
+        if (event.modifiers.platform || event.modifiers.control)
+            && self.session.read(cx).synctex.is_some()
+        {
+            self.trigger_synctex_inverse_at(page, norm_pt, cx);
+            return;
+        }
 
         // Area Note marquee mode (Alt+Drag or Area button toggled).
         if self.area_mode || event.modifiers.alt {
@@ -1216,6 +1887,7 @@ impl PdfViewport {
                         quads: Vec::new(),
                         bounds: rect,
                         color: RgbaColor::ORANGE,
+                        category: None,
                         selected_text: None,
                         note_contents: None,
                         modified_at: pdf_now_string(),
@@ -1350,11 +2022,16 @@ impl PdfViewport {
         }
     }
 
-    fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_header(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.hide_header {
+            return div().into_any_element();
+        }
         let is_frozen = self.freeze_state.is_frozen();
         let (trail_num, parent_num) = cx.global::<AppRegistry>().trail_info(self.id);
         let parent_id = cx.global::<AppRegistry>().parent_id(self.id);
         let is_flashed = cx.global::<AppRegistry>().flash_viewport == Some(self.id);
+        let is_follower = self.portal_follower;
+        let auto_scroll = self.auto_scroll_speed;
 
         let page_count = self.session.read(cx).page_count();
         let current_page = self.anchor.page.one_based();
@@ -1369,6 +2046,8 @@ impl PdfViewport {
             rgb(0xfef3c7)
         } else if is_frozen {
             rgb(0xfffbeb)
+        } else if is_follower {
+            rgb(0xf3e8ff)
         } else if is_flashed {
             rgb(0xe0f2fe)
         } else {
@@ -1377,6 +2056,8 @@ impl PdfViewport {
 
         let border_col = if is_frozen {
             rgb(0xf59e0b)
+        } else if is_follower {
+            rgb(0x9333ea)
         } else {
             rgb(0xe4e4e7)
         };
@@ -1455,6 +2136,48 @@ impl PdfViewport {
                     .child(if is_frozen { "LOCKED [F]" } else { "Freeze [F]" })
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_freeze(cx))),
             )
+            .child(
+                div()
+                    .id(("portal-btn", self.id.0))
+                    .px_1p5()
+                    .py_0p5()
+                    .rounded_sm()
+                    .cursor_pointer()
+                    .font_weight(FontWeight::MEDIUM)
+                    .bg(if is_follower {
+                        rgb(0x7e22ce)
+                    } else {
+                        rgb(0xe4e4e7)
+                    })
+                    .text_color(if is_follower {
+                        rgb(0xffffff)
+                    } else {
+                        rgb(0x27272a)
+                    })
+                    .hover(|s| s.opacity(0.9))
+                    .child(match &self.active_portal_label {
+                        Some(lbl) if is_follower => format!("Portal: {lbl}"),
+                        _ if is_follower => "Portal [⇧P]".to_string(),
+                        _ => "Portal".to_string(),
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        cx.emit(ViewportEvent::RequestTogglePortalFollower(this.id));
+                    })),
+            )
+            .when_some(auto_scroll, |row, speed| {
+                row.child(
+                    div()
+                        .id(("autoscroll-pill", self.id.0))
+                        .px_1p5()
+                        .py_0p5()
+                        .rounded_sm()
+                        .bg(rgb(0x047857))
+                        .text_color(rgb(0xffffff))
+                        .cursor_pointer()
+                        .child(format!("▶ {:.0}px/s", speed))
+                        .on_click(cx.listener(|this, _, _, cx| this.toggle_auto_scroll(cx))),
+                )
+            })
             .child(
                 div()
                     .id(("prev-pg", self.id.0))
@@ -1574,7 +2297,7 @@ impl PdfViewport {
             ));
 
         header = header.child(left).child(right);
-        header
+        header.into_any_element()
     }
 
     fn render_selection_popover(
@@ -1616,6 +2339,7 @@ impl PdfViewport {
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.commit_text_annotation(
                             AnnotationKind::Highlight,
+                            None,
                             color,
                             false,
                             window,
@@ -1825,11 +2549,29 @@ impl PdfViewport {
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .child(
                     div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(div().flex().items_center().gap_1p5().children(swatches))
-                        .child(
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1p5()
+                            .children(swatches)
+                            .when_some(ann.category, |row, cat| {
+                                let (lbl, _) = highlight_category_spec(cat);
+                                row.child(
+                                    div()
+                                        .px_1p5()
+                                        .py_0p5()
+                                        .rounded_sm()
+                                        .bg(rgb(0x27272a))
+                                        .text_color(rgb(0xd4d4d8))
+                                        .child(format!("[{cat}] {lbl}")),
+                                )
+                            }),
+                    )
+                    .child(
                             div()
                                 .flex()
                                 .items_center()
@@ -1928,11 +2670,16 @@ impl PdfViewport {
         let img_h = meta.norm_height * scale;
         let offset_y = ((preview.top_norm_y - 16.0).max(0.0) * scale)
             .clamp(0.0, (img_h - preview_h).max(0.0));
-        let color_mode = self.session.read(cx).color_mode;
+        let session_ref = self.session.read(cx);
+        let color_mode = session_ref.color_mode;
+        let custom_bg = session_ref.custom_bg_rgb;
         let page_bg = match color_mode {
             ColorMode::Light => rgb(0xffffff),
             ColorMode::Sepia => rgb(0xf7efe0),
             ColorMode::Dark => rgb(0x14161c),
+            ColorMode::Custom => {
+                rgb(((custom_bg[0] as u32) << 16) | ((custom_bg[1] as u32) << 8) | (custom_bg[2] as u32))
+            }
         };
         let target_page = preview.page;
         let target_y = preview.top_norm_y;
@@ -2148,9 +2895,22 @@ impl Render for PdfViewport {
             _ => None,
         };
 
-        // Snapshot page annotations, links, color mode, and active search quads for the paint closure.
+        // Snapshot page annotations, links, color mode, portals, SyncTeX, and active search quads for the paint closure.
         let session_ref = self.session.read(cx);
         let color_mode = session_ref.color_mode;
+        let custom_bg = session_ref.custom_bg_rgb;
+        let synctex_highlight = session_ref.synctex_highlight;
+        let page_portals: Vec<Vec<(u64, f32)>> = visible_pages
+            .iter()
+            .map(|p| {
+                session_ref
+                    .portals
+                    .iter()
+                    .filter(|portal| portal.src_page == p.page)
+                    .map(|portal| (portal.id, portal.src_focal_y))
+                    .collect()
+            })
+            .collect();
         let mut page_annots = Vec::with_capacity(visible_pages.len());
         let mut page_links = Vec::with_capacity(visible_pages.len());
         let mut page_search_quads: Vec<Vec<(NormQuad, bool)>> =
@@ -2185,6 +2945,15 @@ impl Render for PdfViewport {
             ColorMode::Light => (rgb(0xe4e4e7), rgb(0xffffff), rgb(0xcbd5e1)),
             ColorMode::Sepia => (rgb(0xd6cfc2), rgb(0xf7efe0), rgb(0xb8ae9c)),
             ColorMode::Dark => (rgb(0x09090b), rgb(0x14161c), rgb(0x27272a)),
+            ColorMode::Custom => {
+                let p_u32 = ((custom_bg[0] as u32) << 16)
+                    | ((custom_bg[1] as u32) << 8)
+                    | (custom_bg[2] as u32);
+                let c_bg = rgb(((custom_bg[0].saturating_sub(14) as u32) << 16)
+                    | ((custom_bg[1].saturating_sub(14) as u32) << 8)
+                    | (custom_bg[2].saturating_sub(14) as u32));
+                (c_bg, rgb(p_u32), rgb(0x3f3f46))
+            }
         };
         let canvas_el = canvas(
             move |canvas_bounds, _, _| {
@@ -2237,7 +3006,9 @@ impl Render for PdfViewport {
                             {
                                 let rb = norm_rect_to_bounds(rbox.inflate(2.0), page_bounds, scale);
                                 let (fill, bar) = match color_mode {
-                                    ColorMode::Dark => (rgba(0x38bdf830), rgb(0x38bdf8)),
+                                    ColorMode::Dark | ColorMode::Custom => {
+                                        (rgba(0x38bdf830), rgb(0x38bdf8))
+                                    }
                                     _ => (rgba(0xfbbf242e), rgb(0xd97706)),
                                 };
                                 window.paint_quad(
@@ -2249,6 +3020,37 @@ impl Render for PdfViewport {
                                 );
                                 window.paint_quad(
                                     PaintQuad::new(accent).background(bar).corner_radii(px(1.5)),
+                                );
+                            }
+
+                            // Paint Scroll-Linked Portal margin anchors
+                            if let Some(portals_on_page) = page_portals.get(idx) {
+                                for &(_pid, fy) in portals_on_page {
+                                    let py = page_bounds.origin.y
+                                        + px((fy * p.norm_height * scale).clamp(4.0, p.pixel_h - 14.0));
+                                    let marker = Bounds::new(
+                                        point(page_bounds.origin.x - px(7.), py),
+                                        size(px(5.), px(14.)),
+                                    );
+                                    window.paint_quad(
+                                        PaintQuad::new(marker)
+                                            .background(rgb(0x9333ea))
+                                            .corner_radii(px(2.5)),
+                                    );
+                                }
+                            }
+
+                            // Paint SyncTeX forward-search highlight
+                            if let Some((sp, srect)) = synctex_highlight
+                                && sp == p.page
+                            {
+                                let sb = norm_rect_to_bounds(srect.inflate(3.0), page_bounds, scale);
+                                window.paint_quad(
+                                    PaintQuad::new(sb)
+                                        .background(rgba(0x06b6d444))
+                                        .border_widths(px(1.5))
+                                        .border_color(rgb(0x0891b2))
+                                        .corner_radii(px(3.)),
                                 );
                             }
 
@@ -2346,8 +3148,12 @@ impl Render for PdfViewport {
         let ann_popover = self.render_annotation_popover(&placements, scale, bounds, cx);
         let overview_popover = self.render_overview_popover(bounds, overview_img, cx);
 
-        let outer_border = if is_frozen {
+        let outer_border = if self.hide_header {
+            rgb(0x09090b)
+        } else if is_frozen {
             rgb(0xd97706)
+        } else if self.portal_follower {
+            rgb(0x9333ea)
         } else if is_focused {
             rgb(0x2563eb)
         } else {
@@ -2366,6 +3172,9 @@ impl Render for PdfViewport {
             let msg = match op {
                 PendingMarkOp::Set => "Set mark: press [a-z0-9] (Esc cancels)",
                 PendingMarkOp::Jump => "Jump to mark: press [a-z0-9] (Esc cancels)",
+                PendingMarkOp::TypedHighlight => {
+                    "Category highlight: press [a-z] bucket (t=Theorem, d=Def, r=Result, ... Esc cancels)"
+                }
             };
             div()
                 .absolute()
@@ -2382,11 +3191,78 @@ impl Render for PdfViewport {
                 .child(msg)
         });
 
-        let vp_context = if self.pending_mark_op.is_some() {
-            format!("{VIEWPORT_CONTEXT} {MARK_PENDING_CONTEXT}")
-        } else {
-            VIEWPORT_CONTEXT.to_string()
-        };
+        let hint_banner = self.hint_mode.as_ref().map(|hm| {
+            let mode_title = match hm.kind {
+                HintModeKind::Jump => "Hint Jump",
+                HintModeKind::Overview => "Hint Overview",
+                HintModeKind::SelectStart => "Hint Select Start",
+                HintModeKind::SelectEnd { .. } => "Hint Select End",
+            };
+            let filter_str = if hm.typed.is_empty() {
+                "type 2-letter label".to_string()
+            } else {
+                format!("typed: \"{}\"", hm.typed.to_ascii_uppercase())
+            };
+            div()
+                .absolute()
+                .top(px(10.))
+                .left(px(10.))
+                .px_2p5()
+                .py_1()
+                .rounded_sm()
+                .bg(rgb(0x92400e))
+                .text_color(rgb(0xfef3c7))
+                .text_xs()
+                .font_weight(FontWeight::SEMIBOLD)
+                .shadow_md()
+                .child(format!("{mode_title}: {filter_str} (Esc cancel)"))
+        });
+
+        let mut hint_pills: Vec<AnyElement> = Vec::new();
+        if let Some(ref hm) = self.hint_mode {
+            for (idx, cand) in hm.candidates.iter().enumerate() {
+                if !cand.label.starts_with(&hm.typed) {
+                    continue;
+                }
+                let Some(p) = visible_pages.iter().find(|p| p.page == cand.page) else {
+                    continue;
+                };
+                let hx = (p.local_x + cand.rect.min_x * scale - 2.0)
+                    .clamp(4.0, (vw - 36.0).max(4.0));
+                let hy = (p.local_y + cand.rect.min_y * scale - 15.0)
+                    .clamp(4.0, (vh - 20.0).max(4.0));
+                let display_lbl = cand.label.to_ascii_uppercase();
+                hint_pills.push(
+                    div()
+                        .id(("hint-pill", (self.id.0 << 12) | idx as u64))
+                        .absolute()
+                        .left(px(hx))
+                        .top(px(hy))
+                        .px_1()
+                        .py_0p5()
+                        .rounded_sm()
+                        .bg(rgb(0xf59e0b))
+                        .border_1()
+                        .border_color(rgb(0x451a03))
+                        .text_xs()
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(rgb(0x09090b))
+                        .shadow_sm()
+                        .child(display_lbl)
+                        .into_any_element(),
+                );
+            }
+        }
+
+        let mut vp_context = VIEWPORT_CONTEXT.to_string();
+        if self.pending_mark_op.is_some() {
+            vp_context.push(' ');
+            vp_context.push_str(MARK_PENDING_CONTEXT);
+        }
+        if self.hint_mode.is_some() {
+            vp_context.push(' ');
+            vp_context.push_str(HINT_MODE_CONTEXT);
+        }
 
         div()
             .id(("viewport-root", self.id.0))
@@ -2456,7 +3332,38 @@ impl Render for PdfViewport {
             .on_action(cx.listener(|this, _: &BeginJumpMark, _, cx| {
                 this.begin_mark_op(PendingMarkOp::Jump, cx);
             }))
+            .on_action(cx.listener(|this, _: &BeginTypedHighlight, _, cx| {
+                this.begin_typed_highlight(cx);
+            }))
             .on_action(cx.listener(|this, _: &ToggleAreaMode, _, cx| this.toggle_area_mode(cx)))
+            .on_action(cx.listener(|this, _: &LinkPortal, _, cx| this.link_portal(cx)))
+            .on_action(cx.listener(|this, _: &TogglePortalFollower, _, cx| {
+                cx.emit(ViewportEvent::RequestTogglePortalFollower(this.id));
+            }))
+            .on_action(cx.listener(|this, _: &DeleteNearestPortal, _, cx| {
+                this.delete_nearest_portal(cx);
+            }))
+            .on_action(cx.listener(|this, _: &BeginHintJump, _, cx| {
+                this.begin_hint_mode(HintModeKind::Jump, cx);
+            }))
+            .on_action(cx.listener(|this, _: &BeginHintOverview, _, cx| {
+                this.begin_hint_mode(HintModeKind::Overview, cx);
+            }))
+            .on_action(cx.listener(|this, _: &BeginHintSelect, _, cx| {
+                this.begin_hint_mode(HintModeKind::SelectStart, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SynctexInverseJump, _, cx| {
+                this.synctex_inverse_here(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleAutoScroll, _, cx| {
+                this.toggle_auto_scroll(cx);
+            }))
+            .on_action(cx.listener(|this, _: &AutoScrollFaster, _, cx| {
+                this.adjust_auto_scroll_speed(20.0, cx);
+            }))
+            .on_action(cx.listener(|this, _: &AutoScrollSlower, _, cx| {
+                this.adjust_auto_scroll_speed(-20.0, cx);
+            }))
             .child(self.render_header(cx))
             .child(
                 div()
@@ -2481,7 +3388,9 @@ impl Render for PdfViewport {
                         }
                     }))
                     .child(canvas_el)
+                    .children(hint_pills)
                     .children(mark_prompt)
+                    .children(hint_banner)
                     .children(sel_popover)
                     .children(ann_popover)
                     .children(overview_popover),
@@ -2609,5 +3518,21 @@ fn paint_annotation_overlay(
                 .border_color(rgb(0xffffff))
                 .corner_radii(px(4.)),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn generate_hint_labels_produces_unique_two_letter_codes() {
+        let labels = generate_hint_labels(120);
+        assert_eq!(labels.len(), 120);
+        let set: HashSet<&str> = labels.iter().map(String::as_str).collect();
+        assert_eq!(set.len(), 120);
+        assert_eq!(labels[0], "aa");
+        assert!(labels.iter().all(|l| l.len() == 2 && l.chars().all(|c| c.is_ascii_lowercase())));
     }
 }
