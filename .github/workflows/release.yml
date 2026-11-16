@@ -56,7 +56,10 @@ jobs:
           echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Run workspace unit tests
-        run: cargo test --locked --workspace
+        run: |
+          cargo test --locked --workspace
+          rm -rf target/debug
+          df -h
 
       - name: Build Universal macOS bundle and DMG
         run: bash scripts/package_macos.sh --universal --no-install --version "${{ steps.meta.outputs.version }}"

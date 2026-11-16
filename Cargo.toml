@@ -30,7 +30,6 @@ uuid = { version = "1", features = ["v4"] }
 smallvec = "1"
 lru = "0.12"
 parking_lot = "0.12"
-rfd = "0.15"
 thiserror = "2"
 anyhow = "1"
 compact_str = "0.9"

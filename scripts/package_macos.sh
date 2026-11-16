@@ -112,7 +112,9 @@ rm -rf "$STAGING_DIR" "$DMG_PATH"
 mkdir -p "$STAGING_DIR"
 cp -R -X "$APP_DIR" "$STAGING_DIR/Pinleaf.app"
 ln -s /Applications "$STAGING_DIR/Applications"
-/usr/bin/hdiutil create -volname "Pinleaf" -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
+STAGING_MB="$(du -sm "$STAGING_DIR" | awk '{print $1}')"
+DMG_SIZE_MB="$((STAGING_MB + 80))"
+/usr/bin/hdiutil create -volname "Pinleaf" -srcfolder "$STAGING_DIR" -fs HFS+ -nospotlight -size "${DMG_SIZE_MB}m" -ov -format UDZO "$DMG_PATH"
 rm -rf "$STAGING_DIR"
 
 if [[ "$NO_INSTALL" -eq 0 ]]; then
