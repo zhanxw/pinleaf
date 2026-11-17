@@ -5,15 +5,17 @@ Reproducible Remotion project for Pinleaf's five 1920x1080 (30 FPS, H.264 + AAC)
 ## Prerequisites
 
 - Node.js 20+
-- Python 3 + `ffmpeg` / `ffprobe` (for voiceover synthesis on macOS via `/usr/bin/say`)
+- `uv` + `ffmpeg` / `ffprobe` (for neural voiceover synthesis via `edge-tts`)
 
 ## Regenerate Voiceover Audio & Frame Timings
 
 ```bash
-python3 scripts/generate_voiceover.py
+uv run scripts/generate_voiceover.py
+# Optional voice override:
+# uv run scripts/generate_voiceover.py --voice en-US-AvaMultilingualNeural
 ```
 
-This synthesizes 20 narration tracks using macOS `say` (`Samantha`), converts them to MP3 under `public/audio/`, and writes exact composition durations into `src/generated/timings.json`.
+This synthesizes 20 neural voiceover tracks using `edge-tts` (`en-US-AndrewMultilingualNeural` by default), loudness-normalizes them to `-16 LUFS` into `public/audio/`, and writes exact composition durations into `src/generated/timings.json`.
 
 ## Install & Render Videos
 
