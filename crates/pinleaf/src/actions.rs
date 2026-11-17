@@ -22,6 +22,7 @@ actions!(
         OpenDemo,
         SavePdf,
         SavePdfAs,
+        PrintDocument,
         ShowAbout,
         QuitApp,
         UndoAnnot,
@@ -90,14 +91,15 @@ pub fn register_keybindings(cx: &mut gpui::App) {
     cx.bind_keys([
         KeyBinding::new("secondary-n", NewWindow, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-o", OpenFile, Some(APP_CONTEXT)),
+        KeyBinding::new("secondary-shift-o", OpenRecentPopup, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-s", SavePdf, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-shift-s", SavePdfAs, Some(APP_CONTEXT)),
+        KeyBinding::new("secondary-p", PrintDocument, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-q", QuitApp, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-z", UndoAnnot, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-shift-z", RedoAnnot, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-shift-a", ToggleSidebar, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-f", OpenSearch, Some(APP_CONTEXT)),
-        KeyBinding::new("secondary-p", OpenRecentPopup, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-shift-f", OpenGlobalHighlightsPopup, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-g", NextSearchMatch, Some(APP_CONTEXT)),
         KeyBinding::new("secondary-shift-g", PrevSearchMatch, Some(APP_CONTEXT)),
@@ -272,6 +274,9 @@ pub fn register_keybindings(cx: &mut gpui::App) {
                     Some(APP_NO_INPUT),
                 ));
             }
+            "print" => {
+                custom_bindings.push(KeyBinding::new(&key_spec, PrintDocument, Some(APP_NO_INPUT)));
+            }
             _ => {}
         }
     }
@@ -299,6 +304,7 @@ pub fn install_app_menus(cx: &mut gpui::App) {
             MenuItem::separator(),
             MenuItem::action("Save PDF", SavePdf),
             MenuItem::action("Save PDF As…", SavePdfAs),
+            MenuItem::action("Print…", PrintDocument),
             MenuItem::action("Toggle Live Auto-Reload", ToggleAutoReload),
             MenuItem::separator(),
             MenuItem::action("Close Pane / Window", ClosePane),
@@ -395,6 +401,7 @@ mod tests {
             "alt--",
             "secondary-alt-g",
             "ctrl-g",
+            "secondary-shift-o",
             "secondary-shift-t",
             "secondary-alt-t",
             "space",

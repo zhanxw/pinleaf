@@ -2,6 +2,7 @@ mod actions;
 mod app_state;
 mod command_popup;
 mod external;
+mod file_picker;
 mod icon;
 mod ipc;
 mod library;
@@ -208,6 +209,25 @@ pub(crate) fn open_demo_window(cx: &mut App) -> Option<WindowHandle<WindowWorksp
     open_session_in_window(session_model, cx)
 }
 
+pub(crate) fn open_welcome_window(cx: &mut App) -> Option<WindowHandle<WindowWorkspace>> {
+    let mut session_model = DocumentSession::open_demo().expect("demo PDF loads");
+    cx.global::<AppRegistry>()
+        .prepare_session_model(&mut session_model);
+    let session = cx.new(|_| session_model);
+
+    let bounds = Bounds::centered(None, size(px(1080.), px(760.)), cx);
+    cx.open_window(
+        WindowOptions::default()
+            .window_bounds(WindowBounds::Windowed(bounds))
+            .titlebar(Some(TitlebarOptions {
+                title: Some("Pinleaf".into()),
+                ..Default::default()
+            })),
+        move |window, cx| cx.new(|cx| WindowWorkspace::new_welcome(session, window, cx)),
+    )
+    .ok()
+}
+
 pub(crate) fn open_pdf_in_new_window(
     path: PathBuf,
     cx: &mut App,
@@ -256,7 +276,8 @@ fn focus_or_open_pdf(path: PathBuf, cx: &mut App) -> Option<WindowHandle<WindowW
     {
         let replace_demo = windows[0]
             .read::<WindowWorkspace, _, _>(cx, |ws_entity, cx| {
-                ws_entity.read(cx).is_untouched_demo(cx)
+                let ws = ws_entity.read(cx);
+                ws.is_welcome_mode() || ws.is_untouched_demo(cx)
             })
             .unwrap_or(false);
         if replace_demo {
@@ -316,9 +337,9 @@ fn handle_ipc_request(req: IpcRequest, cx: &mut App) {
         }
         IpcRequest::ExecuteCommand { command, args } => match command.as_str() {
             "ping" => {}
-            "quit" | "quit_app" => cx.quit(),
+            "quit" | "quit_app" => AppRegistry::quit_app(cx),
             "new_window" => {
-                open_demo_window(cx);
+                open_welcome_window(cx);
                 cx.activate(true);
             }
             "open" => {
@@ -461,7 +482,7 @@ USAGE:\n  \
         cx.spawn(async move |cx| {
             cx.update(|cx| {
                 if cx.windows().is_empty() {
-                    open_demo_window(cx);
+                    open_welcome_window(cx);
                     cx.activate(true);
                 }
             });
@@ -481,11 +502,11 @@ USAGE:\n  \
                 install_app_menus(cx);
 
                 cx.on_action(|_: &QuitApp, cx| {
-                    cx.quit();
+                    AppRegistry::quit_app(cx);
                 });
                 cx.on_action(|_: &ShowAbout, cx| {
                     if cx.windows().is_empty()
-                        && let Some(ws) = open_demo_window(cx)
+                        && let Some(ws) = open_welcome_window(cx)
                     {
                         let _ = ws.update(cx, |ws, window, cx| {
                             ws.open_about_popup(window, cx);
@@ -494,7 +515,7 @@ USAGE:\n  \
                     }
                 });
                 cx.on_action(|_: &NewWindow, cx| {
-                    open_demo_window(cx);
+                    open_welcome_window(cx);
                     cx.activate(true);
                 });
                 cx.on_action(|_: &OpenFile, cx| {
@@ -522,7 +543,7 @@ USAGE:\n  \
                 });
 
                 cx.on_window_closed(|cx, closed_win_id| {
-                    cx.update_global::<AppRegistry, _>(|reg, _| {
+                    let (was_welcome, quitting) = cx.update_global::<AppRegistry, _>(|reg, _| {
                         let to_remove: Vec<_> = reg
                             .viewports
                             .iter()
@@ -532,7 +553,20 @@ USAGE:\n  \
                         for id in to_remove {
                             reg.unregister_viewport(id);
                         }
+                        (reg.welcome_windows.remove(&closed_win_id), reg.quitting)
                     });
+                    if !quitting && !was_welcome && cx.windows().is_empty() {
+                        cx.spawn(async move |cx| {
+                            cx.update(|cx| {
+                                if !cx.global::<AppRegistry>().quitting && cx.windows().is_empty()
+                                {
+                                    let _ = open_welcome_window(cx);
+                                    cx.activate(true);
+                                }
+                            });
+                        })
+                        .detach();
+                    }
                 })
                 .detach();
 

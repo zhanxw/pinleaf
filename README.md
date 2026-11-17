@@ -37,35 +37,35 @@ New to Pinleaf? Browse the full-width feature demos below, stream/download the n
 <img src="docs/videos/01-freeze-and-portals.gif" width="100%" alt="Pinleaf Multi-View Freeze-and-Branch & Scroll Portals" />
 
 Freeze source context (`F` / `⌘D`), branch unlimited child panes (`#1 🔒 → #2 🔒 → #3`), smart-route references without scrolling away, and bind scroll-linked portals (`P` / `⇧P`) so helper panes auto-follow figures and equations as you read.
-- **1080p Video with Audio:** [Download / Stream 01-freeze-and-portals.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/01-freeze-and-portals.mp4) · [`docs/videos/01-freeze-and-portals.mp4`](docs/videos/01-freeze-and-portals.mp4)
+- **1080p Video with Audio:** [Download / Stream 01-freeze-and-portals.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/01-freeze-and-portals.mp4) · [`docs/videos/01-freeze-and-portals.mp4`](docs/videos/01-freeze-and-portals.mp4)
 
 ### 02. Go-to-Page, Thumbnails, Smart Jump & Hints (44s)
 
 <img src="docs/videos/02-navigation-smart-jump-hints.gif" width="100%" alt="Go-to-Page, Page Thumbnails, Smart Jump & Hints" />
 
 Jump directly via the Command Palette (`/4`), Go-to-Page modal (`⌥⌘G` / `^G`), clickable `p.X/Y` pill, or Vim `<num>G`, browse the virtualized Page Thumbnails strip (`⇧⌘T`) and 4-column Grid (`⌥⌘T`), navigate Overview previews with `Enter` / `S` / `Esc`, use Vimium 2-letter hints (`;` / `:` / `V`), filter Auto-TOC (`T`), regex search (`⌘F`), and scroll with `Space` / `⇧Space`.
-- **1080p Video with Audio:** [Download / Stream 02-navigation-smart-jump-hints.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/02-navigation-smart-jump-hints.mp4) · [`docs/videos/02-navigation-smart-jump-hints.mp4`](docs/videos/02-navigation-smart-jump-hints.mp4)
+- **1080p Video with Audio:** [Download / Stream 02-navigation-smart-jump-hints.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/02-navigation-smart-jump-hints.mp4) · [`docs/videos/02-navigation-smart-jump-hints.mp4`](docs/videos/02-navigation-smart-jump-hints.mp4)
 
 ### 03. ISO-32000 PDF Annotations, 26 Categories & Library (45s)
 
 <img src="docs/videos/03-annotations-categories-library.gif" width="100%" alt="PDF Annotations, 26 Categories & Library" />
 
 Select cleanly across columns to highlight (`⌘H`), add notes (`⌘M`), underline (`U`), strikeout (`S`), or draw figure marquees (`A`) with atomic PDF `/Annots` saves (`⌘S`), tag across 26 highlight categories (`H + a–z`), filter in the Notes Sidebar (`⇧⌘A`), search highlights globally (`⇧⌘F`), or open DOIs on Google Scholar (`⇧⌘K`).
-- **1080p Video with Audio:** [Download / Stream 03-annotations-categories-library.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/03-annotations-categories-library.mp4) · [`docs/videos/03-annotations-categories-library.mp4`](docs/videos/03-annotations-categories-library.mp4)
+- **1080p Video with Audio:** [Download / Stream 03-annotations-categories-library.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/03-annotations-categories-library.mp4) · [`docs/videos/03-annotations-categories-library.mp4`](docs/videos/03-annotations-categories-library.mp4)
 
 ### 04. Smart Dark Mode, Comfort & Presentation Mode (42s)
 
 <img src="docs/videos/04-themes-comfort-presentation.gif" width="100%" alt="Smart Dark Mode, Comfort & Presentation Mode" />
 
 Cycle `Light`, `Dark`, `Sepia`, and `Custom` hex palettes (`F8`), keep raster plots crisp and un-inverted inside dark modes (`⇧F8`), crop side margins (`F10` / `W`), step lines with the Reading Ruler (`R`), stream smoothly with 60 FPS Auto-Scroll (`F6`), and switch to fullscreen Presentation Mode (`F5`).
-- **1080p Video with Audio:** [Download / Stream 04-themes-comfort-presentation.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/04-themes-comfort-presentation.mp4) · [`docs/videos/04-themes-comfort-presentation.mp4`](docs/videos/04-themes-comfort-presentation.mp4)
+- **1080p Video with Audio:** [Download / Stream 04-themes-comfort-presentation.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/04-themes-comfort-presentation.mp4) · [`docs/videos/04-themes-comfort-presentation.mp4`](docs/videos/04-themes-comfort-presentation.mp4)
 
 ### 05. Live Auto-Reload, Two-Way SyncTeX, CLI IPC & Extensions (43s)
 
 <img src="docs/videos/05-synctex-ipc-extensions.gif" width="100%" alt="SyncTeX, CLI IPC & Shell Extensions" />
 
 Reload edited TeX/Typst PDFs automatically without losing scroll anchors, jump both ways with pure-Rust `.synctex.gz` (`--synctex-forward` / `⌘+Click` / `⇧⌘J`), script live windows over Unix socket IPC (`--execute-command` including `goto_page` and `toggle_thumbnails`), run shell/Python extensions (`⇧⌘E`), and view/copy version details via `Pinleaf` → **About Pinleaf**.
-- **1080p Video with Audio:** [Download / Stream 05-synctex-ipc-extensions.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/05-synctex-ipc-extensions.mp4) · [`docs/videos/05-synctex-ipc-extensions.mp4`](docs/videos/05-synctex-ipc-extensions.mp4)
+- **1080p Video with Audio:** [Download / Stream 05-synctex-ipc-extensions.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/05-synctex-ipc-extensions.mp4) · [`docs/videos/05-synctex-ipc-extensions.mp4`](docs/videos/05-synctex-ipc-extensions.mp4)
 
 ---
 
@@ -76,13 +76,14 @@ Reload edited TeX/Typst PDFs automatically without losing scroll anchors, jump b
 - **Scroll-Linked Portals (`P`, `⇧P`, `⌥P`):**
   Bind any reading paragraph (or active Overview card) to a figure, table, or equation anchor (`P`), spawn or toggle a `Portal Follower` pane (`⇧P`) that switches targets automatically as you scroll, delete the nearest portal (`⌥P`), and persist portals per PDF in `LibraryStore`.
 - **Keyboard-First Navigation, Smart Jump & Vimium Hints:**
+  - **Quick File & Folder Picker (`⌘O`) & Welcome Screen:** Browse local folders, filter PDFs live as you type, paste any path or `file://` URL (`⌘V`), fall back to macOS Finder (`⌥⌘O`), or launch from the Welcome Window whenever all PDFs are closed.
   - **Command Palette (`/` or `?`):** Fuzzy-filter all commands, inspect platform shortcuts, or jump straight to a page (`/14`, `/:14`, `/page 14`).
   - **Go to Page & Page Thumbnails (`⌥⌘G` / `⇧⌘T` / `⌥⌘T`):** Jump immediately via the `⌥⌘G` (`^G`) modal, clickable `p.X/Y` header pill, or Vim `<number>G`, browse a virtualized left **Thumbnail Strip** (`⇧⌘T`), or open the **4-Column Thumbnail Grid** (`⌥⌘T`, arrow/`hjkl` nav, `⌘+Click` / `⌘+Enter` to freeze & split right).
   - **Heuristic Smart Jump:** Click unlinked references like `Figure 1`, `Theorem 2`, `Eq. (3)`, or `[12]` to jump, or **Right-Click** for a floating **Overview** preview (`↵` Jump, `S` / `⌘↵` Split, `P` Portal, `Esc` / `X` Close) without scrolling away.
   - **2-Letter Home-Row Hints (`;` / `:` / `V`):** Overlay yellow badges on visible links, smart-jump refs, and words for mouse-free Jump (`;`), Overview (`:`), and two-endpoint Text Select (`V`).
   - **Embedded + Auto-TOC (`T` / `⌘T`), Regex Search (`⌘F`), & Marks (`m` / `` ` ``):** Infer section outlines automatically when `/Outlines` is absent, run `re:` regex queries, save single-key bookmarks, and navigate jump history (`⌘[` / `⌘]`), screen scroll (`Space` / `⇧Space`), or Vim keys (`j`/`k`/`d`/`u`/`g`/`G`).
 - **Native ISO-32000 PDF `/Annots` & 26 Typed Highlight Categories (`H + a–z`):**
-  Select text across two columns to highlight (`⌘H`), attach inline sticky notes (`⌘M`), underline (`U`), strikeout (`S`), or draw figure area marquees (`A`) with undo/redo (`⌘Z` / `⇧⌘Z`) and atomic incremental writes (`⌘S`) readable by Apple Preview and standard PDF viewers. Tag or re-tag highlights into 26 buckets (`H + a–z`, saved via `/Subj (pinleaf-cat:<ch>)`) and filter in the Notes Sidebar (`⇧⌘A`), Quick-Open Recent (`⌘P`), Global Highlight Search (`⇧⌘F`), or Scholar/DOI lookup (`⇧⌘K`).
+  Select text across two columns to highlight (`⌘H`), attach inline sticky notes (`⌘M`), underline (`U`), strikeout (`S`), or draw figure area marquees (`A`) with undo/redo (`⌘Z` / `⇧⌘Z`), atomic incremental writes (`⌘S`), and native vector Print (`⌘P`). Tag or re-tag highlights into 26 buckets (`H + a–z`, saved via `/Subj (pinleaf-cat:<ch>)`) and filter in the Notes Sidebar (`⇧⌘A`), Quick-Open Recent (`⇧⌘O`), Global Highlight Search (`⇧⌘F`), or Scholar/DOI lookup (`⇧⌘K`).
 - **Smart Dark Mode, Reading Comfort & Presentation Mode:**
   Cycle `Light` / `Dark` / `Sepia` / `Custom` (`F8`), toggle `Smart Dark Mode` (`⇧F8`) so `hayro` preserves raster plots/diagrams un-inverted inside dark & custom themes, crop margins to content width (`F10` / `W`), step lines with the Visual Reading Ruler (`R`), stream smoothly with 60 FPS Auto-Scroll (`F6`, `⌥=` / `⌥-`), and switch to chrome-free fullscreen Presentation Mode (`F5`).
 - **Two-Way SyncTeX, CLI IPC & Shell Extensions:**
@@ -103,7 +104,7 @@ curl -fsSL https://raw.githubusercontent.com/zhanxw/pinleaf/main/install.sh | sh
 - Installs `Pinleaf.app` into `/Applications` (or `~/Applications` if `/Applications` is not writable), verifies `SHA256SUMS.txt`, strips Gatekeeper quarantine, and links `pinleaf` into `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`.
 - Customize via flags or env vars:
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/zhanxw/pinleaf/main/install.sh | sh -s -- --version v0.2.2 --no-cli
+  curl -fsSL https://raw.githubusercontent.com/zhanxw/pinleaf/main/install.sh | sh -s -- --version v0.2.3 --no-cli
   # Env vars: PINLEAF_VERSION, PINLEAF_INSTALL_DIR, PINLEAF_BIN_DIR
   ```
 
@@ -188,7 +189,7 @@ Custom settings, themes, highlight categories, inverse-search editors, keybindin
 | Table of Contents | `T` or `⌘T` |
 | Search / Next / Prev | `⌘F` / `n` / `N` |
 | Notes Sidebar (Category Filters) | `⇧⌘A` |
-| Quick-Open Recent / Global Highlights | `⌘P` / `⇧⌘F` |
+| Quick-Open Recent / Global Highlights | `⇧⌘O` / `⇧⌘F` |
 | Highlight / Typed Category / Note | `⌘H` / `H + a–z` / `⌘M` |
 | Underline / Strikeout / Area Box | `U` / `S` / `A` |
 | Lookup Scholar / DOI | `⇧⌘K` |
@@ -199,7 +200,7 @@ Custom settings, themes, highlight categories, inverse-search editors, keybindin
 | Shell & Python Extensions Modal | `⇧⌘E` |
 | Set Mark / Jump to Mark | `m + key` / `` ` + key `` |
 | Jump Back / Forward | `⌘[` (`^O`) / `⌘]` (`^I`) |
-| Save / Save As / Open / New Window | `⌘S` / `⇧⌘S` / `⌘O` / `⌘N` |
+| Save / Save As / Print / Open Picker / New Window | `⌘S` / `⇧⌘S` / `⌘P` / `⌘O` (`⌥⌘O` Finder) / `⌘N` |
 
 ---
 

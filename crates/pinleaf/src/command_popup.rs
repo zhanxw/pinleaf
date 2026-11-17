@@ -59,6 +59,7 @@ pub enum CommandId {
     ToggleAutoReload,
     SavePdf,
     SavePdfAs,
+    PrintDocument,
     ShowAbout,
     QuitApp,
     CloseCommandPopup,
@@ -508,16 +509,16 @@ const COMMANDS: &[CommandEntry] = &[
         id: CommandId::OpenFile,
         category: "Document & Help",
         title: "Open PDF File...",
-        description: "Open a PDF document from disk",
+        description: "Browse local folders, filter PDFs as you type, or paste a path",
         shortcut: platform_shortcut("⌘O", "Ctrl+O"),
-        keywords: "load browse file picker",
+        keywords: "load browse file picker path folder",
     },
     CommandEntry {
         id: CommandId::OpenDemo,
         category: "Document & Help",
         title: "Open Built-in Demo Paper",
         description: "Load the built-in 5-page multi-view demo paper",
-        shortcut: "Toolbar",
+        shortcut: "Pinleaf Menu",
         keywords: "sample fixture demo",
     },
     CommandEntry {
@@ -525,7 +526,7 @@ const COMMANDS: &[CommandEntry] = &[
         category: "Document & Help",
         title: "Quick-Open Recent PDFs",
         description: "Fuzzy-search and reopen recently viewed PDF documents",
-        shortcut: platform_shortcut("⌘P", "Ctrl+P"),
+        shortcut: platform_shortcut("⇧⌘O", "Ctrl+Shift+O"),
         keywords: "recent library quick open history files",
     },
     CommandEntry {
@@ -559,6 +560,14 @@ const COMMANDS: &[CommandEntry] = &[
         description: "Save annotated PDF to a new file path",
         shortcut: platform_shortcut("⇧⌘S", "Ctrl+Shift+S"),
         keywords: "copy export save new file",
+    },
+    CommandEntry {
+        id: CommandId::PrintDocument,
+        category: "Document & Help",
+        title: "Print PDF...",
+        description: "Open native print dialog with current PDF and annotations",
+        shortcut: platform_shortcut("⌘P", "Ctrl+P"),
+        keywords: "print printer airprint paper dialog",
     },
     CommandEntry {
         id: CommandId::ShowAbout,
@@ -668,6 +677,37 @@ pub fn parse_page_jump_query(query: &str, page_count: usize) -> Option<u32> {
     Some(parsed.clamp(1, page_count as u32))
 }
 
+/// Maps a logical `selected_command_idx` (0-based selectable row index) to the exact
+/// direct child index inside `command-popup-list`, accounting for the optional
+/// page-jump row and unfiltered category header `div`s.
+pub fn command_scroll_child_index(
+    query: &str,
+    page_count: usize,
+    selected_row_idx: usize,
+) -> usize {
+    if selected_row_idx == 0 {
+        return 0;
+    }
+    let page_jump = parse_page_jump_query(query, page_count);
+    let matches = filter_commands(query);
+    let is_unfiltered = query.trim().is_empty();
+    let cmd_offset = usize::from(page_jump.is_some());
+    let mut child_ix = cmd_offset;
+    let mut last_category: Option<&'static str> = None;
+    for (idx, entry) in matches.iter().enumerate() {
+        if is_unfiltered && last_category != Some(entry.category) {
+            last_category = Some(entry.category);
+            child_ix += 1;
+        }
+        let row_idx = idx + cmd_offset;
+        if row_idx == selected_row_idx {
+            return child_ix;
+        }
+        child_ix += 1;
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -744,5 +784,43 @@ mod tests {
         assert_eq!(parse_page_jump_query("p0", 40), None);
         assert_eq!(parse_page_jump_query("freeze", 40), None);
         assert_eq!(parse_page_jump_query("5", 0), None);
+    }
+
+    #[test]
+    fn command_scroll_child_index_maps_filtered_unfiltered_and_page_jump_rows() {
+        // Selected row 0 always maps to child 0 (keeping first category heading visible when unfiltered).
+        assert_eq!(command_scroll_child_index("", 40, 0), 0);
+        assert_eq!(command_scroll_child_index("open", 40, 0), 0);
+        assert_eq!(command_scroll_child_index("26", 40, 0), 0);
+
+        // Filtered query ("open"): no category headers, no page jump -> 1:1 mapping.
+        let open_matches = filter_commands("open");
+        assert!(open_matches.len() > 7);
+        assert_eq!(command_scroll_child_index("open", 40, 7), 7);
+        let last_open = open_matches.len() - 1;
+        assert_eq!(command_scroll_child_index("open", 40, last_open), last_open);
+
+        // Unfiltered query (""): each category transition adds 1 header child ahead of that row.
+        let all = all_commands();
+        let mut expected_headers = 0usize;
+        let mut prev_cat: Option<&'static str> = None;
+        for (idx, entry) in all.iter().enumerate() {
+            if prev_cat != Some(entry.category) {
+                prev_cat = Some(entry.category);
+                expected_headers += 1;
+            }
+            if idx > 0 {
+                assert_eq!(
+                    command_scroll_child_index("", 40, idx),
+                    idx + expected_headers
+                );
+            }
+        }
+
+        // Numeric page-jump query ("26"): row 0 is page jump; row 1 is first matching command if any.
+        let num_matches = filter_commands("26");
+        if !num_matches.is_empty() {
+            assert_eq!(command_scroll_child_index("26", 40, 1), 1);
+        }
     }
 }

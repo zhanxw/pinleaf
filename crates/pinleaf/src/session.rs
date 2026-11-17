@@ -870,6 +870,19 @@ impl DocumentSession {
         true
     }
 
+    /// Returns a self-contained PDF byte buffer suitable for printing, baking in any
+    /// unsaved annotation edits in memory without modifying the file on disk.
+    pub fn export_printable_pdf_bytes(&self) -> Vec<u8> {
+        let diff = self.annotations.pending_diff();
+        if diff.is_empty() {
+            return (*self.pdf_bytes).clone();
+        }
+        match save_annotations_to_bytes(&self.pdf_bytes, &diff, &self.page_transforms) {
+            Ok(saved) => saved.bytes,
+            Err(_) => (*self.pdf_bytes).clone(),
+        }
+    }
+
     pub fn save_to_path(&mut self, target_path: &Path, cx: &mut Context<Self>) {
         let diff = self.annotations.pending_diff();
         let result = if diff.is_empty() && self.path.as_deref() == Some(target_path) {
@@ -1148,5 +1161,32 @@ mod tests {
 
         let tiny = thumbnail_scale_for_page(100.0, 100.0);
         assert_eq!(tiny, 0.5);
+    }
+
+    #[test]
+    fn export_printable_pdf_bytes_includes_unsaved_annotations() {
+        let mut session = DocumentSession::open_demo().expect("demo PDF loads");
+        assert_eq!(session.annotations.all_sorted().len(), 1);
+        let rect = pinleaf_core::NormRect::new(72.0, 140.0, 260.0, 156.0);
+        session.annotations.insert(pinleaf_core::Annotation {
+            id: pinleaf_core::AnnotationId::new(),
+            pdf_object_id: None,
+            page: PageIndex(0),
+            kind: pinleaf_core::AnnotationKind::Highlight,
+            quads: vec![pinleaf_core::NormQuad::from_rect(rect)],
+            bounds: rect,
+            color: pinleaf_core::RgbaColor::YELLOW,
+            category: Some('t'),
+            selected_text: Some("Theorem 1".to_string()),
+            note_contents: None,
+            modified_at: "D:20261117101500Z".to_string(),
+        });
+        assert!(session.annotations.is_dirty());
+
+        let bytes = session.export_printable_pdf_bytes();
+        let reloaded = pinleaf_annot::load_annotations(&bytes, &session.page_transforms)
+            .expect("exported printable PDF annotations parse");
+        assert_eq!(reloaded.len(), 2);
+        assert!(session.annotations.is_dirty());
     }
 }

@@ -6,7 +6,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 01 — Multi-View Freeze-and-Branch & Scroll-Linked Portals
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/01-freeze-and-portals.mp4) · [Local Repo File](videos/01-freeze-and-portals.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/01-freeze-and-portals.mp4) · [Local Repo File](videos/01-freeze-and-portals.mp4)
 
 ![Multi-View Freeze-and-Branch & Scroll Portals](videos/01-freeze-and-portals.png)
 
@@ -19,7 +19,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 02 — Go-to-Page, Thumbnails, Smart Jump & Hints
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/02-navigation-smart-jump-hints.mp4) · [Local Repo File](videos/02-navigation-smart-jump-hints.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/02-navigation-smart-jump-hints.mp4) · [Local Repo File](videos/02-navigation-smart-jump-hints.mp4)
 
 ![Go-to-Page, Page Thumbnails, Smart Jump & Hints](videos/02-navigation-smart-jump-hints.png)
 
@@ -32,20 +32,20 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 03 — ISO-32000 PDF Annotations, 26 Categories & Library
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/03-annotations-categories-library.mp4) · [Local Repo File](videos/03-annotations-categories-library.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/03-annotations-categories-library.mp4) · [Local Repo File](videos/03-annotations-categories-library.mp4)
 
 ![26 Typed Highlight Categories & Sidebar Filters](videos/03-annotations-categories-library.png)
 
 1. **Standard ISO-32000 PDF `/Annots`** — Two-column-aware selection supports highlights (`⌘H`), inline sticky notes (`⌘M`), underlines (`U`), strikeouts (`S`), and figure area marquees (`A`) with full undo/redo (`⌘Z` / `⇧⌘Z`) and atomic incremental writes (`⌘S`) readable in Apple Preview.
 2. **26 Typed Highlight Categories (`H + a–z`)** — Tag new selections or re-classify existing highlights across 26 buckets (`t` Theorem, `m` Method, `d` Definition, `q` Question, …). Categories store `/Subj (pinleaf-cat:<ch>)` and `/C` directly in PDF `/Annots`.
 3. **Notes Sidebar & Live Category Chips (`⇧⌘A`)** — Filter annotations by category bucket inside the sidebar to review all theorems, open questions, or experimental methods across the paper.
-4. **Global Search & Citation Lookup (`⌘P`, `⇧⌘F`, `⇧⌘K`)** — Jump across your indexed library with Quick-Open Recent (`⌘P`), search highlights/notes across all PDFs (`⇧⌘F`), or open DOIs / Google Scholar queries (`⇧⌘K`).
+4. **Global Search & Citation Lookup (`⇧⌘O`, `⇧⌘F`, `⇧⌘K`)** — Jump across your indexed library with Quick-Open Recent (`⇧⌘O`), search highlights/notes across all PDFs (`⇧⌘F`), or open DOIs / Google Scholar queries (`⇧⌘K`).
 
 ---
 
 ## Video 04 — Smart Dark Mode, Comfort & Presentation Mode
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/04-themes-comfort-presentation.mp4) · [Local Repo File](videos/04-themes-comfort-presentation.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/04-themes-comfort-presentation.mp4) · [Local Repo File](videos/04-themes-comfort-presentation.mp4)
 
 ![Smart Dark Mode Figure Preservation](videos/04-themes-comfort-presentation.png)
 
@@ -58,7 +58,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 05 — LaTeX/Typst Live Workflow: SyncTeX, CLI IPC & Extensions
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/05-synctex-ipc-extensions.mp4) · [Local Repo File](videos/05-synctex-ipc-extensions.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.3/05-synctex-ipc-extensions.mp4) · [Local Repo File](videos/05-synctex-ipc-extensions.mp4)
 
 ![Two-Way SyncTeX & Editor Integration](videos/05-synctex-ipc-extensions.png)
 

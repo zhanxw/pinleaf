@@ -1,15 +1,15 @@
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
     AnyElement, AnyWindowHandle, App, Axis, Bounds, ClipboardItem, Context, Entity, FocusHandle,
     FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseMoveEvent, PathPromptOptions, Pixels,
-    Render, RenderImage, ScrollStrategy, Subscription, TitlebarOptions, UniformListScrollHandle,
-    Window, WindowBounds, WindowOptions, canvas, div, img, prelude::*, px, rgb, rgba, size,
-    uniform_list,
+    Render, RenderImage, ScrollHandle, ScrollStrategy, Subscription, TitlebarOptions,
+    UniformListScrollHandle, Window, WindowBounds, WindowOptions, canvas, div, img, prelude::*, px,
+    rgb, rgba, size, uniform_list,
 };
 use pinleaf_core::{
     AnnotationId, AnnotationKind, FreezeState, PageIndex, ReadingAnchor, ViewportId, ZoomSpec,
@@ -20,14 +20,19 @@ use pinleaf_engine::filter_toc;
 use crate::actions::{
     APP_CONTEXT, COMMAND_POPUP_CONTEXT, CycleColorMode, GoToPage, NextSearchMatch,
     OVERLAY_POPUP_CONTEXT, OpenDemo, OpenExtensionsPopup, OpenFile, OpenGlobalHighlightsPopup,
-    OpenRecentPopup, OpenSearch, PrevSearchMatch, RedoAnnot, SEARCH_BAR_CONTEXT, SavePdf,
-    SavePdfAs, ShowAbout, ToggleAutoReload, ToggleCommandPopup, TogglePresentationMode,
+    OpenRecentPopup, OpenSearch, PrevSearchMatch, PrintDocument, RedoAnnot, SEARCH_BAR_CONTEXT,
+    SavePdf, SavePdfAs, ShowAbout, ToggleAutoReload, ToggleCommandPopup, TogglePresentationMode,
     ToggleSidebar, ToggleSmartDarkMode, ToggleThumbnailGrid, ToggleThumbnails, ToggleTocPopup,
     UndoAnnot,
 };
 use crate::app_state::{AppRegistry, navigate_viewport_globally, sync_portal_followers};
-use crate::command_popup::{CommandEntry, CommandId, filter_commands, parse_page_jump_query};
+use crate::command_popup::{
+    CommandEntry, CommandId, command_scroll_child_index, filter_commands, parse_page_jump_query,
+};
 use crate::external::run_shell_extension_blocking;
+use crate::file_picker::{
+    FilePickerState, PickerAction, PickerEntry, PickerEntryKind, home_dir,
+};
 use crate::library::{GlobalHighlightHit, IndexedHighlight, matches_highlight};
 use crate::session::{ColorMode, DocumentSession};
 use crate::viewport::{HintModeKind, PdfViewport, ViewportEvent};
@@ -263,17 +268,27 @@ pub struct WindowWorkspace {
     command_popup_open: bool,
     command_query: String,
     selected_command_idx: usize,
+    command_scroll_handle: ScrollHandle,
     command_focus_handle: FocusHandle,
     search_bar_open: bool,
     search_focus_handle: FocusHandle,
     toc_popup_open: bool,
     toc_query: String,
     toc_selected_idx: usize,
+    toc_scroll_handle: ScrollHandle,
     toc_focus_handle: FocusHandle,
     library_modal: Option<LibraryModalKind>,
     library_query: String,
     library_selected_idx: usize,
+    library_scroll_handle: ScrollHandle,
     library_focus_handle: FocusHandle,
+    file_picker_open: bool,
+    file_picker: FilePickerState,
+    file_picker_scroll_handle: ScrollHandle,
+    file_picker_focus_handle: FocusHandle,
+    last_file_picker_dir: Option<PathBuf>,
+    welcome_mode: bool,
+    welcome_focus_handle: FocusHandle,
     next_split_id: u64,
     active_split_drag: Option<(u64, Axis, Rc<Cell<Bounds<Pixels>>>)>,
     subscriptions: HashMap<ViewportId, Subscription>,
@@ -325,6 +340,21 @@ impl WindowWorkspace {
         Self::from_existing_viewport(session, viewport, window, cx)
     }
 
+    pub fn new_welcome(
+        session: Entity<DocumentSession>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let mut ws = Self::new_with_anchor(session, None, ReadingAnchor::default(), window, cx);
+        ws.welcome_mode = true;
+        ws.pending_focus = Some(ws.welcome_focus_handle.clone());
+        let win_id = window.window_handle().window_id();
+        cx.update_global::<AppRegistry, _>(|reg, _| {
+            reg.welcome_windows.insert(win_id);
+        });
+        ws
+    }
+
     pub fn from_existing_viewport(
         session: Entity<DocumentSession>,
         viewport: Entity<PdfViewport>,
@@ -344,6 +374,14 @@ impl WindowWorkspace {
 
         let _session_obs = Self::observe_session(&session, cx);
         session.update(cx, |s, cx| s.trigger_background_text_index(cx));
+        let initial_picker_dir = session
+            .read(cx)
+            .path
+            .as_ref()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .filter(|d| d.is_dir())
+            .or_else(home_dir)
+            .unwrap_or_else(|| PathBuf::from("/"));
 
         let mut ws = Self {
             session,
@@ -368,17 +406,27 @@ impl WindowWorkspace {
             command_popup_open: false,
             command_query: String::new(),
             selected_command_idx: 0,
+            command_scroll_handle: ScrollHandle::new(),
             command_focus_handle: cx.focus_handle(),
             search_bar_open: false,
             search_focus_handle: cx.focus_handle(),
             toc_popup_open: false,
             toc_query: String::new(),
             toc_selected_idx: 0,
+            toc_scroll_handle: ScrollHandle::new(),
             toc_focus_handle: cx.focus_handle(),
             library_modal: None,
             library_query: String::new(),
             library_selected_idx: 0,
+            library_scroll_handle: ScrollHandle::new(),
             library_focus_handle: cx.focus_handle(),
+            file_picker_open: false,
+            file_picker: FilePickerState::new(initial_picker_dir.clone()),
+            file_picker_scroll_handle: ScrollHandle::new(),
+            file_picker_focus_handle: cx.focus_handle(),
+            last_file_picker_dir: Some(initial_picker_dir),
+            welcome_mode: false,
+            welcome_focus_handle: cx.focus_handle(),
             next_split_id: 1,
             active_split_drag: None,
             subscriptions,
@@ -429,6 +477,10 @@ impl WindowWorkspace {
             })
             .detach();
         }
+    }
+
+    pub fn is_welcome_mode(&self) -> bool {
+        self.welcome_mode
     }
 
     pub fn is_untouched_demo(&self, cx: &App) -> bool {
@@ -623,8 +675,49 @@ impl WindowWorkspace {
         cx.notify();
     }
 
+    fn enter_welcome_mode(&mut self, cx: &mut Context<Self>) {
+        self.sync_current_session_library(cx);
+        self.sidebar_open = false;
+        self.thumbnails_open = false;
+        self.thumbnail_grid_open = false;
+        self.toc_popup_open = false;
+        self.goto_page_open = false;
+        self.search_bar_open = false;
+        self.presentation_mode = false;
+        self.brand_menu_open = false;
+        self.command_popup_open = false;
+        self.file_picker_open = false;
+        self.library_modal = None;
+        self.about_popup_open = false;
+
+        if let Ok(mut placeholder) = DocumentSession::open_demo() {
+            cx.global::<AppRegistry>()
+                .prepare_session_model(&mut placeholder);
+            let new_session = cx.new(|_| placeholder);
+            let mut all_vps = Vec::new();
+            self.root.all_viewports(&mut all_vps);
+            for vp in all_vps {
+                vp.update(cx, |vp, cx| vp.set_session(new_session.clone(), cx));
+            }
+            self._session_obs = Self::observe_session(&new_session, cx);
+            self.session = new_session;
+            self.last_seen_status = None;
+            self.sync_status_toast_timer(cx);
+        }
+
+        self.welcome_mode = true;
+        self.pending_focus = Some(self.welcome_focus_handle.clone());
+        cx.notify();
+    }
+
     fn close_pane(&mut self, target_id: ViewportId, cx: &mut Context<Self>) {
         if self.root.leaf_count() <= 1 {
+            if cx.windows().len() <= 1 {
+                if !self.welcome_mode {
+                    self.enter_welcome_mode(cx);
+                }
+                return;
+            }
             cx.update_global::<AppRegistry, _>(|reg, _| {
                 reg.unregister_viewport(target_id);
             });
@@ -827,11 +920,13 @@ impl WindowWorkspace {
     fn open_command_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.toc_popup_open = false;
         self.library_modal = None;
+        self.file_picker_open = false;
         self.goto_page_open = false;
         self.thumbnail_grid_open = false;
         self.command_popup_open = true;
         self.command_query.clear();
         self.selected_command_idx = 0;
+        self.command_scroll_handle.scroll_to_top_of_item(0);
         window.focus(&self.command_focus_handle, cx);
         cx.notify();
     }
@@ -853,8 +948,12 @@ impl WindowWorkspace {
     }
 
     fn restore_viewport_focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        let fh = self.active_viewport_entity(cx).read(cx).focus_handle().clone();
-        window.focus(&fh, cx);
+        if self.welcome_mode {
+            window.focus(&self.welcome_focus_handle, cx);
+        } else {
+            let fh = self.active_viewport_entity(cx).read(cx).focus_handle().clone();
+            window.focus(&fh, cx);
+        }
     }
 
     fn jump_to_page_from_ui(&mut self, page: PageIndex, split_new: bool, cx: &mut Context<Self>) {
@@ -889,6 +988,7 @@ impl WindowWorkspace {
         self.command_popup_open = false;
         self.toc_popup_open = false;
         self.library_modal = None;
+        self.file_picker_open = false;
         self.goto_page_open = false;
         self.thumbnail_grid_open = true;
         let active_pg = self.active_viewport_entity(cx).read(cx).anchor.page.as_usize();
@@ -922,6 +1022,7 @@ impl WindowWorkspace {
         self.command_popup_open = false;
         self.toc_popup_open = false;
         self.library_modal = None;
+        self.file_picker_open = false;
         self.thumbnail_grid_open = false;
         self.goto_page_open = true;
         self.goto_page_query.clear();
@@ -949,6 +1050,7 @@ impl WindowWorkspace {
         self.goto_page_open = false;
         self.thumbnail_grid_open = false;
         self.library_modal = None;
+        self.file_picker_open = false;
         self.about_popup_open = true;
         window.focus(&self.about_focus_handle, cx);
         cx.notify();
@@ -969,6 +1071,7 @@ impl WindowWorkspace {
             self.goto_page_open = false;
             self.thumbnail_grid_open = false;
             self.library_modal = None;
+            self.file_picker_open = false;
         } else {
             self.restore_viewport_focus(window, cx);
         }
@@ -1012,6 +1115,7 @@ impl WindowWorkspace {
     fn open_search_bar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.command_popup_open = false;
         self.toc_popup_open = false;
+        self.file_picker_open = false;
         self.search_bar_open = true;
         window.focus(&self.search_focus_handle, cx);
         self.session.update(cx, |s, cx| s.trigger_background_text_index(cx));
@@ -1037,9 +1141,11 @@ impl WindowWorkspace {
 
     fn open_toc_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.command_popup_open = false;
+        self.file_picker_open = false;
         self.toc_popup_open = true;
         self.toc_query.clear();
         self.toc_selected_idx = 0;
+        self.toc_scroll_handle.scroll_to_top_of_item(0);
         window.focus(&self.toc_focus_handle, cx);
         cx.notify();
     }
@@ -1076,6 +1182,24 @@ impl WindowWorkspace {
         // Close popup and restore viewport focus first so commands that open a new
         // split pane or focus the inline note editor keep their new focus target.
         self.close_command_popup(window, cx);
+
+        if self.welcome_mode
+            && !matches!(
+                cmd,
+                CommandId::OpenFile
+                    | CommandId::OpenDemo
+                    | CommandId::OpenRecentPopup
+                    | CommandId::OpenGlobalHighlightsPopup
+                    | CommandId::OpenExtensionsPopup
+                    | CommandId::NewWindow
+                    | CommandId::ShowAbout
+                    | CommandId::QuitApp
+                    | CommandId::CloseCommandPopup
+                    | CommandId::ClosePane
+            )
+        {
+            return;
+        }
 
         let vp = self.active_viewport_entity(cx);
         let vp_id = vp.read(cx).id;
@@ -1173,12 +1297,13 @@ impl WindowWorkspace {
                 self.session.update(cx, |s, cx| s.toggle_auto_reload(cx));
             }
             CommandId::NewWindow => cx.dispatch_action(&crate::actions::NewWindow),
-            CommandId::OpenFile => self.prompt_open_file(cx),
+            CommandId::OpenFile => self.open_file_picker_popup(window, cx),
             CommandId::OpenDemo => self.open_demo_session(cx),
             CommandId::SavePdf => self.trigger_save(false, cx),
             CommandId::SavePdfAs => self.trigger_save(true, cx),
+            CommandId::PrintDocument => self.trigger_print(cx),
             CommandId::ShowAbout => self.open_about_popup(window, cx),
-            CommandId::QuitApp => cx.quit(),
+            CommandId::QuitApp => AppRegistry::quit_app(cx),
             CommandId::CloseCommandPopup => {}
         }
     }
@@ -1220,6 +1345,12 @@ impl WindowWorkspace {
             if total_rows > 0 {
                 let current = self.selected_command_idx.min(total_rows - 1);
                 self.selected_command_idx = (current + 1) % total_rows;
+                let child_ix = command_scroll_child_index(
+                    &self.command_query,
+                    page_count,
+                    self.selected_command_idx,
+                );
+                self.command_scroll_handle.scroll_to_item(child_ix);
                 cx.notify();
             }
             return;
@@ -1232,6 +1363,12 @@ impl WindowWorkspace {
             if total_rows > 0 {
                 let current = self.selected_command_idx.min(total_rows - 1);
                 self.selected_command_idx = (current + total_rows - 1) % total_rows;
+                let child_ix = command_scroll_child_index(
+                    &self.command_query,
+                    page_count,
+                    self.selected_command_idx,
+                );
+                self.command_scroll_handle.scroll_to_item(child_ix);
                 cx.notify();
             }
             return;
@@ -1259,6 +1396,7 @@ impl WindowWorkspace {
 
         if apply_text_edit_keystroke(&mut self.command_query, event, cx) {
             self.selected_command_idx = 0;
+            self.command_scroll_handle.scroll_to_top_of_item(0);
             cx.notify();
         }
     }
@@ -1318,6 +1456,7 @@ impl WindowWorkspace {
             if len > 0 {
                 let current = self.toc_selected_idx.min(len - 1);
                 self.toc_selected_idx = (current + 1) % len;
+                self.toc_scroll_handle.scroll_to_item(self.toc_selected_idx);
                 cx.notify();
             }
             return;
@@ -1329,6 +1468,7 @@ impl WindowWorkspace {
             if len > 0 {
                 let current = self.toc_selected_idx.min(len - 1);
                 self.toc_selected_idx = (current + len - 1) % len;
+                self.toc_scroll_handle.scroll_to_item(self.toc_selected_idx);
                 cx.notify();
             }
             return;
@@ -1342,6 +1482,7 @@ impl WindowWorkspace {
 
         if apply_text_edit_keystroke(&mut self.toc_query, event, cx) {
             self.toc_selected_idx = 0;
+            self.toc_scroll_handle.scroll_to_top_of_item(0);
             cx.notify();
         }
     }
@@ -1364,9 +1505,11 @@ impl WindowWorkspace {
         self.sync_current_session_library(cx);
         self.command_popup_open = false;
         self.toc_popup_open = false;
+        self.file_picker_open = false;
         self.library_modal = Some(kind);
         self.library_query.clear();
         self.library_selected_idx = 0;
+        self.library_scroll_handle.scroll_to_top_of_item(0);
         window.focus(&self.library_focus_handle, cx);
         cx.notify();
     }
@@ -1399,6 +1542,11 @@ impl WindowWorkspace {
         target_page: PageIndex,
         cx: &mut Context<Self>,
     ) {
+        if let Some(parent) = path.parent()
+            && parent.is_dir()
+        {
+            self.last_file_picker_dir = Some(parent.to_path_buf());
+        }
         let same_as_current = self
             .session
             .read(cx)
@@ -1668,6 +1816,8 @@ impl WindowWorkspace {
             if len > 0 {
                 let current = self.library_selected_idx.min(len - 1);
                 self.library_selected_idx = (current + 1) % len;
+                self.library_scroll_handle
+                    .scroll_to_item(self.library_selected_idx);
                 cx.notify();
             }
             return;
@@ -1679,6 +1829,8 @@ impl WindowWorkspace {
             if len > 0 {
                 let current = self.library_selected_idx.min(len - 1);
                 self.library_selected_idx = (current + len - 1) % len;
+                self.library_scroll_handle
+                    .scroll_to_item(self.library_selected_idx);
                 cx.notify();
             }
             return;
@@ -1691,11 +1843,14 @@ impl WindowWorkspace {
         }
         if apply_text_edit_keystroke(&mut self.library_query, event, cx) {
             self.library_selected_idx = 0;
+            self.library_scroll_handle.scroll_to_top_of_item(0);
             cx.notify();
         }
     }
 
     fn switch_session(&mut self, new_session: Entity<DocumentSession>, cx: &mut Context<Self>) {
+        let was_welcome = self.welcome_mode;
+        self.welcome_mode = false;
         AppRegistry::register_and_start_session(&new_session, 0, cx);
         let mut all_vps = Vec::new();
         self.root.all_viewports(&mut all_vps);
@@ -1706,10 +1861,274 @@ impl WindowWorkspace {
         self.session = new_session;
         self.last_seen_status = None;
         self.sync_status_toast_timer(cx);
+        if was_welcome {
+            self.pending_focus = Some(self.active_viewport_entity(cx).read(cx).focus_handle().clone());
+        }
         cx.notify();
     }
 
-    fn prompt_open_file(&mut self, cx: &mut Context<Self>) {
+    fn resolve_initial_picker_dir(&self, cx: &App) -> PathBuf {
+        if let Some(ref dir) = self.last_file_picker_dir
+            && dir.is_dir()
+        {
+            return dir.clone();
+        }
+        if let Some(parent) = self
+            .session
+            .read(cx)
+            .path
+            .as_ref()
+            .and_then(|p| p.parent())
+            && parent.is_dir()
+        {
+            return parent.to_path_buf();
+        }
+        let reg = cx.global::<AppRegistry>();
+        for doc in &reg.library.documents {
+            if let Some(parent) = doc.path.parent()
+                && parent.is_dir()
+            {
+                return parent.to_path_buf();
+            }
+        }
+        if let Ok(cwd) = std::env::current_dir()
+            && cwd != Path::new("/")
+            && cwd.is_dir()
+        {
+            return cwd;
+        }
+        home_dir()
+            .filter(|d| d.is_dir())
+            .unwrap_or_else(|| PathBuf::from("/"))
+    }
+
+    fn open_file_picker_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.brand_menu_open = false;
+        self.about_popup_open = false;
+        self.command_popup_open = false;
+        self.toc_popup_open = false;
+        self.library_modal = None;
+        self.goto_page_open = false;
+        self.thumbnail_grid_open = false;
+
+        let dir = self.resolve_initial_picker_dir(cx);
+        self.file_picker.open_at(dir, true);
+        self.file_picker_open = true;
+        self.file_picker_scroll_handle
+            .scroll_to_item(self.file_picker.selected_idx);
+        window.focus(&self.file_picker_focus_handle, cx);
+        cx.notify();
+    }
+
+    fn close_file_picker_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.file_picker_open {
+            return;
+        }
+        self.file_picker_open = false;
+        self.restore_viewport_focus(window, cx);
+        cx.notify();
+    }
+
+    fn toggle_file_picker_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.file_picker_open {
+            self.close_file_picker_popup(window, cx);
+        } else {
+            self.open_file_picker_popup(window, cx);
+        }
+    }
+
+    fn handle_picker_action(
+        &mut self,
+        action: PickerAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match action {
+            PickerAction::NavigatedDirectory => {
+                if let Some(ref d) = self.file_picker.cached_dir
+                    && d.is_dir()
+                {
+                    self.last_file_picker_dir = Some(d.clone());
+                }
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            PickerAction::OpenPdf(path) => {
+                if let Some(parent) = path.parent()
+                    && parent.is_dir()
+                {
+                    self.last_file_picker_dir = Some(parent.to_path_buf());
+                }
+                self.close_file_picker_popup(window, cx);
+                self.open_or_switch_path_at_page(path, PageIndex(0), cx);
+            }
+            PickerAction::ShowError(_) => {
+                cx.notify();
+            }
+        }
+    }
+
+    fn submit_file_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let action = self.file_picker.confirm_selection();
+        self.handle_picker_action(action, window, cx);
+    }
+
+    fn activate_file_picker_entry(
+        &mut self,
+        entry: &PickerEntry,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let action = self.file_picker.activate_entry(entry);
+        self.handle_picker_action(action, window, cx);
+    }
+
+    fn handle_file_picker_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        let ks = &event.keystroke;
+
+        if ks.key == "escape"
+            || (ks.modifiers.platform && !ks.modifiers.alt && !ks.modifiers.shift && ks.key == "o")
+        {
+            self.close_file_picker_popup(window, cx);
+            return;
+        }
+        if ks.modifiers.platform && ks.modifiers.alt && ks.key == "o" {
+            self.close_file_picker_popup(window, cx);
+            self.prompt_open_file_native(cx);
+            return;
+        }
+
+        let len = self.file_picker.visible_entries().len();
+        if ks.key == "down" || (ks.modifiers.control && ks.key == "n") {
+            if len > 0 {
+                let current = self.file_picker.selected_idx.min(len - 1);
+                self.file_picker.selected_idx = (current + 1) % len;
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            return;
+        }
+        if ks.key == "up"
+            || (ks.modifiers.control && ks.key == "p")
+            || (ks.key == "tab" && ks.modifiers.shift)
+        {
+            if len > 0 {
+                let current = self.file_picker.selected_idx.min(len - 1);
+                self.file_picker.selected_idx = (current + len - 1) % len;
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            return;
+        }
+        if ks.key == "tab" && !ks.modifiers.shift {
+            if self.file_picker.tab_complete() {
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            return;
+        }
+        if ks.key == "enter" {
+            self.submit_file_picker(window, cx);
+            return;
+        }
+        if (ks.modifiers.platform || ks.modifiers.control) && ks.key == "a" && !ks.modifiers.alt {
+            if ks.modifiers.platform {
+                self.file_picker.select_all();
+            } else {
+                self.file_picker.move_home();
+            }
+            cx.notify();
+            return;
+        }
+        if (ks.modifiers.platform || ks.modifiers.control) && ks.key == "v" {
+            if let Some(clip) = cx.read_from_clipboard()
+                && let Some(text) = clip.text()
+                && self.file_picker.apply_paste(&text)
+            {
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            return;
+        }
+        if (ks.modifiers.platform && ks.key == "backspace")
+            || (ks.modifiers.control && ks.key == "u")
+        {
+            if self.file_picker.clear_input() {
+                self.file_picker_scroll_handle.scroll_to_top_of_item(0);
+                cx.notify();
+            }
+            return;
+        }
+        if (ks.modifiers.alt && ks.key == "backspace") || (ks.modifiers.control && ks.key == "w") {
+            if self.file_picker.delete_prev_segment() {
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            return;
+        }
+        if ks.key == "backspace" {
+            if self.file_picker.backspace() {
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            return;
+        }
+        if ks.key == "delete" {
+            if self.file_picker.delete_forward() {
+                self.file_picker_scroll_handle
+                    .scroll_to_item(self.file_picker.selected_idx);
+                cx.notify();
+            }
+            return;
+        }
+        if ks.key == "home" || (ks.modifiers.platform && ks.key == "left") {
+            self.file_picker.move_home();
+            cx.notify();
+            return;
+        }
+        if ks.key == "end"
+            || (ks.modifiers.platform && ks.key == "right")
+            || (ks.modifiers.control && ks.key == "e")
+        {
+            self.file_picker.move_end();
+            cx.notify();
+            return;
+        }
+        if ks.key == "left" {
+            self.file_picker.move_left();
+            cx.notify();
+            return;
+        }
+        if ks.key == "right" {
+            self.file_picker.move_right();
+            cx.notify();
+            return;
+        }
+        if !ks.modifiers.platform
+            && !ks.modifiers.control
+            && let Some(ref text) = ks.key_char
+            && self.file_picker.insert_text(text)
+        {
+            self.file_picker_scroll_handle
+                .scroll_to_item(self.file_picker.selected_idx);
+            cx.notify();
+        }
+    }
+
+    fn prompt_open_file_native(&mut self, cx: &mut Context<Self>) {
         let rx = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
@@ -1725,28 +2144,32 @@ impl WindowWorkspace {
                 return;
             };
             let _ = ws.update(cx, |ws, cx| {
-                if let Some(existing) = cx.global::<AppRegistry>().lookup_session(&path) {
-                    ws.switch_session(existing, cx);
-                    return;
-                }
-                match DocumentSession::open_path(path.clone()) {
-                    Ok(mut session_model) => {
-                        cx.global::<AppRegistry>()
-                            .prepare_session_model(&mut session_model);
-                        let entity = cx.new(|_| session_model);
-                        AppRegistry::register_and_start_session(&entity, 0, cx);
-                        ws.switch_session(entity, cx);
-                    }
-                    Err(err) => {
-                        ws.session.update(cx, |s, cx| {
-                            s.status_message = Some((format!("Open failed: {err}"), true));
-                            cx.notify();
-                        });
-                    }
-                }
+                ws.open_or_switch_path_at_page(path, PageIndex(0), cx);
             });
         })
         .detach();
+    }
+
+    fn trigger_print(&mut self, cx: &mut Context<Self>) {
+        let (bytes, title) = {
+            let s = self.session.read(cx);
+            (s.export_printable_pdf_bytes(), s.title.clone())
+        };
+        match crate::external::print_pdf_bytes(&bytes, &title) {
+            Ok(true) => {
+                self.session.update(cx, |s, cx| {
+                    s.status_message = Some((format!("Sent {title} to print"), false));
+                    cx.notify();
+                });
+            }
+            Ok(false) => {}
+            Err(err) => {
+                self.session.update(cx, |s, cx| {
+                    s.status_message = Some((format!("Print failed: {err}"), true));
+                    cx.notify();
+                });
+            }
+        }
     }
 
     fn trigger_save(&mut self, force_save_as: bool, cx: &mut Context<Self>) {
@@ -1851,8 +2274,8 @@ impl WindowWorkspace {
                     .child(toolbar_btn(
                         "open-pdf",
                         "Open",
-                        false,
-                        cx.listener(|this, _, _, cx| this.prompt_open_file(cx)),
+                        self.file_picker_open,
+                        cx.listener(|this, _, window, cx| this.toggle_file_picker_popup(window, cx)),
                     ))
                     .child(toolbar_btn(
                         "recent-btn",
@@ -2023,8 +2446,10 @@ impl WindowWorkspace {
             row
         };
         let ws_about = cx.entity();
+        let ws_open = cx.entity();
         let ws_demo = cx.entity();
         let ws_save_as = cx.entity();
+        let ws_print = cx.entity();
         let ws_cmds = cx.entity();
 
         div()
@@ -2067,6 +2492,14 @@ impl WindowWorkspace {
                     ))
                     .child(div().h(px(1.)).my_1().bg(rgb(0x27272a)))
                     .child(menu_row(
+                        "brand-menu-open",
+                        "Open PDF File...",
+                        "Cmd+O",
+                        Box::new(move |_, window, app| {
+                            ws_open.update(app, |this, cx| this.open_file_picker_popup(window, cx));
+                        }),
+                    ))
+                    .child(menu_row(
                         "brand-menu-demo",
                         "Open Built-in Demo",
                         "",
@@ -2077,17 +2510,30 @@ impl WindowWorkspace {
                             });
                         }),
                     ))
-                    .child(menu_row(
-                        "brand-menu-save-as",
-                        "Save PDF As...",
-                        "",
-                        Box::new(move |_, window, app| {
-                            ws_save_as.update(app, |this, cx| {
-                                this.close_brand_menu(window, cx);
-                                this.trigger_save(true, cx);
-                            });
-                        }),
-                    ))
+                    .when(!self.welcome_mode, |menu| {
+                        menu.child(menu_row(
+                            "brand-menu-save-as",
+                            "Save PDF As...",
+                            "",
+                            Box::new(move |_, window, app| {
+                                ws_save_as.update(app, |this, cx| {
+                                    this.close_brand_menu(window, cx);
+                                    this.trigger_save(true, cx);
+                                });
+                            }),
+                        ))
+                        .child(menu_row(
+                            "brand-menu-print",
+                            "Print...",
+                            "Cmd+P",
+                            Box::new(move |_, window, app| {
+                                ws_print.update(app, |this, cx| {
+                                    this.close_brand_menu(window, cx);
+                                    this.trigger_print(cx);
+                                });
+                            }),
+                        ))
+                    })
                     .child(menu_row(
                         "brand-menu-cmds",
                         "Commands & Shortcuts",
@@ -2104,7 +2550,7 @@ impl WindowWorkspace {
                         "brand-menu-quit",
                         "Quit Pinleaf",
                         "Cmd+Q",
-                        Box::new(|_, _, app| app.quit()),
+                        Box::new(|_, _, app| AppRegistry::quit_app(app)),
                     )),
             )
     }
@@ -2438,6 +2884,7 @@ impl WindowWorkspace {
                 div()
                     .id("sidebar-list")
                     .flex_1()
+                    .min_h_0()
                     .overflow_y_scroll()
                     .p_2()
                     .flex()
@@ -2474,6 +2921,7 @@ impl WindowWorkspace {
 
                         div()
                             .id(("sb-ann", idx))
+                            .flex_shrink_0()
                             .p_2()
                             .rounded_md()
                             .bg(rgb(0xffffff))
@@ -3272,6 +3720,7 @@ impl WindowWorkspace {
             list_items.push(
                 div()
                     .id("cmd-row-page-jump")
+                    .flex_shrink_0()
                     .px_2p5()
                     .py_1p5()
                     .rounded_sm()
@@ -3325,6 +3774,7 @@ impl WindowWorkspace {
         if matches.is_empty() && page_jump.is_none() {
             list_items.push(
                 div()
+                    .flex_shrink_0()
                     .px_3()
                     .py_2()
                     .text_xs()
@@ -3342,6 +3792,7 @@ impl WindowWorkspace {
                     last_category = Some(entry.category);
                     list_items.push(
                         div()
+                            .flex_shrink_0()
                             .px_2()
                             .pt_2()
                             .pb_0p5()
@@ -3379,9 +3830,11 @@ impl WindowWorkspace {
             .size_full()
             .bg(rgba(0x09090b88))
             .flex()
-            .items_start()
-            .justify_center()
-            .pt(px(52.))
+            .flex_col()
+            .items_center()
+            .pt(px(48.))
+            .pb(px(24.))
+            .px(px(16.))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, window, cx| {
@@ -3398,7 +3851,10 @@ impl WindowWorkspace {
                     .on_key_down(cx.listener(Self::handle_command_popup_key_down))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .w(px(580.))
+                    .max_w_full()
                     .max_h(px(520.))
+                    .flex_initial()
+                    .min_h_0()
                     .flex()
                     .flex_col()
                     .rounded_md()
@@ -3410,6 +3866,7 @@ impl WindowWorkspace {
                     .overflow_hidden()
                     .child(
                         div()
+                            .flex_shrink_0()
                             .flex()
                             .items_center()
                             .justify_between()
@@ -3472,6 +3929,7 @@ impl WindowWorkspace {
                     )
                     .child(
                         div()
+                            .flex_shrink_0()
                             .flex()
                             .items_center()
                             .justify_between()
@@ -3528,6 +3986,7 @@ impl WindowWorkspace {
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.command_query.clear();
                                             this.selected_command_idx = 0;
+                                            this.command_scroll_handle.scroll_to_top_of_item(0);
                                             cx.notify();
                                         }))
                                         .child("Clear"),
@@ -3537,10 +3996,12 @@ impl WindowWorkspace {
                     .child(
                         div()
                             .id("command-popup-list")
-                            .flex_1()
+                            .flex_initial()
                             .min_h_0()
                             .overflow_y_scroll()
-                            .p_2()
+                            .track_scroll(&self.command_scroll_handle)
+                            .my_1p5()
+                            .px_2()
                             .flex()
                             .flex_col()
                             .gap_1()
@@ -3560,6 +4021,7 @@ impl WindowWorkspace {
         let cmd_id = entry.id;
         div()
             .id(("cmd-row", idx))
+            .flex_shrink_0()
             .px_2p5()
             .py_1p5()
             .rounded_sm()
@@ -3786,6 +4248,7 @@ impl WindowWorkspace {
         if filtered.is_empty() {
             rows.push(
                 div()
+                    .flex_shrink_0()
                     .px_3()
                     .py_2()
                     .text_xs()
@@ -3803,6 +4266,7 @@ impl WindowWorkspace {
                 rows.push(
                     div()
                         .id(("toc-row", idx))
+                        .flex_shrink_0()
                         .px_2p5()
                         .py_1p5()
                         .rounded_sm()
@@ -3886,9 +4350,11 @@ impl WindowWorkspace {
             .size_full()
             .bg(rgba(0x09090b88))
             .flex()
-            .items_start()
-            .justify_center()
-            .pt(px(52.))
+            .flex_col()
+            .items_center()
+            .pt(px(48.))
+            .pb(px(24.))
+            .px(px(16.))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, window, cx| {
@@ -3905,7 +4371,10 @@ impl WindowWorkspace {
                     .on_key_down(cx.listener(Self::handle_toc_key_down))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .w(px(560.))
+                    .max_w_full()
                     .max_h(px(520.))
+                    .flex_initial()
+                    .min_h_0()
                     .flex()
                     .flex_col()
                     .rounded_md()
@@ -3917,6 +4386,7 @@ impl WindowWorkspace {
                     .overflow_hidden()
                     .child(
                         div()
+                            .flex_shrink_0()
                             .flex()
                             .items_center()
                             .justify_between()
@@ -3955,6 +4425,7 @@ impl WindowWorkspace {
                     )
                     .child(
                         div()
+                            .flex_shrink_0()
                             .px_3()
                             .py_2()
                             .bg(rgb(0x09090b))
@@ -3971,10 +4442,12 @@ impl WindowWorkspace {
                     .child(
                         div()
                             .id("toc-popup-list")
-                            .flex_1()
+                            .flex_initial()
                             .min_h_0()
                             .overflow_y_scroll()
-                            .p_2()
+                            .track_scroll(&self.toc_scroll_handle)
+                            .my_1p5()
+                            .px_2()
                             .flex()
                             .flex_col()
                             .gap_1()
@@ -4023,6 +4496,7 @@ impl WindowWorkspace {
         if items.is_empty() {
             rows.push(
                 div()
+                    .flex_shrink_0()
                     .px_3()
                     .py_2()
                     .text_xs()
@@ -4037,6 +4511,7 @@ impl WindowWorkspace {
                 rows.push(
                     div()
                         .id(("lib-row", idx))
+                        .flex_shrink_0()
                         .px_2p5()
                         .py_1p5()
                         .rounded_sm()
@@ -4116,9 +4591,11 @@ impl WindowWorkspace {
             .size_full()
             .bg(rgba(0x09090b88))
             .flex()
-            .items_start()
-            .justify_center()
-            .pt(px(52.))
+            .flex_col()
+            .items_center()
+            .pt(px(48.))
+            .pb(px(24.))
+            .px(px(16.))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, window, cx| {
@@ -4135,7 +4612,10 @@ impl WindowWorkspace {
                     .on_key_down(cx.listener(Self::handle_library_key_down))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .w(px(620.))
+                    .max_w_full()
                     .max_h(px(520.))
+                    .flex_initial()
+                    .min_h_0()
                     .flex()
                     .flex_col()
                     .rounded_md()
@@ -4147,6 +4627,7 @@ impl WindowWorkspace {
                     .overflow_hidden()
                     .child(
                         div()
+                            .flex_shrink_0()
                             .flex()
                             .items_center()
                             .justify_between()
@@ -4187,6 +4668,7 @@ impl WindowWorkspace {
                     )
                     .child(
                         div()
+                            .flex_shrink_0()
                             .px_3()
                             .py_2()
                             .bg(rgb(0x09090b))
@@ -4203,10 +4685,449 @@ impl WindowWorkspace {
                     .child(
                         div()
                             .id("library-popup-list")
-                            .flex_1()
+                            .flex_initial()
                             .min_h_0()
                             .overflow_y_scroll()
-                            .p_2()
+                            .track_scroll(&self.library_scroll_handle)
+                            .my_1p5()
+                            .px_2()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .children(rows),
+                    ),
+            )
+    }
+
+    fn render_file_picker_popup(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let app_icon = cx.global::<AppRegistry>().app_icon.clone();
+        let (resolved_dir, filter_text) = self.file_picker.resolved_dir_and_filter();
+        let (entries, total_matching) = self.file_picker.visible_entries_with_total();
+        let len = entries.len();
+        let count_badge = if total_matching > len {
+            format!("{len}/{total_matching}")
+        } else {
+            format!("{len}")
+        };
+        let selected_idx = if len > 0 {
+            Some(self.file_picker.selected_idx.min(len - 1))
+        } else {
+            None
+        };
+        let parent_dir = resolved_dir.parent().map(Path::to_path_buf);
+        let input_empty = self.file_picker.input.is_empty();
+        let input_display = if input_empty {
+            "Type filename filter or paste /path/to/folder...".to_string()
+        } else {
+            self.file_picker.format_input_for_display(64)
+        };
+        let show_all = self.file_picker.show_all_files;
+        let dir_exists = self.file_picker.cached_dir_exists;
+
+        let status_banner: Option<(String, bool)> = if let Some(ref err) = self.file_picker.error_message
+        {
+            Some((err.clone(), true))
+        } else if !dir_exists {
+            Some((
+                format!(
+                    "Folder not found: {} — edit or paste a valid path",
+                    resolved_dir.display()
+                ),
+                true,
+            ))
+        } else {
+            None
+        };
+
+        let mut rows: Vec<AnyElement> = Vec::with_capacity(len.max(1));
+        if entries.is_empty() {
+            let empty_msg = if !dir_exists {
+                "Directory does not exist. Paste a valid path (Cmd+V) or press Opt+Backspace."
+                    .to_string()
+            } else if !filter_text.trim().is_empty() {
+                format!(
+                    "No matching {} in {} for \"{}\".",
+                    if show_all { "items" } else { "folders or PDFs" },
+                    resolved_dir.display(),
+                    filter_text.trim()
+                )
+            } else if show_all {
+                format!("Folder is empty: {}", resolved_dir.display())
+            } else {
+                format!(
+                    "No subfolders or PDFs in {} (click \"All Files\" to show other files).",
+                    resolved_dir.display()
+                )
+            };
+            rows.push(
+                div()
+                    .flex_shrink_0()
+                    .px_3()
+                    .py_2()
+                    .text_xs()
+                    .text_color(rgb(0xa1a1aa))
+                    .child(empty_msg)
+                    .into_any_element(),
+            );
+        } else {
+            for (idx, entry) in entries.into_iter().enumerate() {
+                let is_selected = selected_idx == Some(idx);
+                let entry_click = entry.clone();
+                let (badge_bg, badge_fg) = match entry.kind {
+                    PickerEntryKind::ParentDir => (rgb(0x27272a), rgb(0xd4d4d8)),
+                    PickerEntryKind::Directory => (rgb(0x172554), rgb(0x93c5fd)),
+                    PickerEntryKind::PdfFile => (rgb(0x450a0a), rgb(0xfca5a5)),
+                    PickerEntryKind::OtherFile => (rgb(0x27272a), rgb(0xa1a1aa)),
+                };
+                let label_text = match entry.kind {
+                    PickerEntryKind::ParentDir => "..".to_string(),
+                    PickerEntryKind::Directory => format!("{}/", entry.name),
+                    PickerEntryKind::PdfFile | PickerEntryKind::OtherFile => entry.name.clone(),
+                };
+                let label_color = match entry.kind {
+                    PickerEntryKind::OtherFile if !is_selected => rgb(0xa1a1aa),
+                    _ => rgb(0xffffff),
+                };
+
+                rows.push(
+                    div()
+                        .id(("file-picker-row", idx))
+                        .flex_shrink_0()
+                        .px_2p5()
+                        .py_1p5()
+                        .rounded_sm()
+                        .cursor_pointer()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .bg(if is_selected {
+                            rgb(0x1e3a8a)
+                        } else {
+                            rgb(0x18181b)
+                        })
+                        .border_1()
+                        .border_color(if is_selected {
+                            rgb(0x3b82f6)
+                        } else {
+                            rgb(0x27272a)
+                        })
+                        .hover(|s| {
+                            if is_selected {
+                                s.bg(rgb(0x1d4ed8))
+                            } else {
+                                s.bg(rgb(0x27272a))
+                            }
+                        })
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.activate_file_picker_entry(&entry_click, window, cx);
+                        }))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .px_1p5()
+                                        .py_0p5()
+                                        .rounded_sm()
+                                        .bg(badge_bg)
+                                        .text_color(badge_fg)
+                                        .text_xs()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child(entry.extension_badge),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .text_xs()
+                                        .font_weight(match entry.kind {
+                                            PickerEntryKind::Directory
+                                            | PickerEntryKind::PdfFile => FontWeight::SEMIBOLD,
+                                            _ => FontWeight::NORMAL,
+                                        })
+                                        .text_color(label_color)
+                                        .child(label_text),
+                                ),
+                        )
+                        .into_any_element(),
+                );
+            }
+        }
+
+        div()
+            .id("file-picker-backdrop")
+            .absolute()
+            .top(px(0.))
+            .left(px(0.))
+            .size_full()
+            .bg(rgba(0x09090b88))
+            .flex()
+            .flex_col()
+            .items_center()
+            .pt(px(48.))
+            .pb(px(24.))
+            .px(px(16.))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    this.close_file_picker_popup(window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .child(
+                div()
+                    .id("file-picker-card")
+                    .key_context(OVERLAY_POPUP_CONTEXT)
+                    .track_focus(&self.file_picker_focus_handle)
+                    .on_key_down(cx.listener(Self::handle_file_picker_key_down))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .w(px(660.))
+                    .max_w_full()
+                    .max_h(px(540.))
+                    .flex_initial()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .rounded_md()
+                    .bg(rgb(0x18181b))
+                    .text_color(rgb(0xf4f4f5))
+                    .border_1()
+                    .border_color(rgb(0x3f3f46))
+                    .shadow_lg()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap_2()
+                            .px_3()
+                            .py_2()
+                            .border_b_1()
+                            .border_color(rgb(0x27272a))
+                            .text_xs()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(img(app_icon).size(px(18.)))
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(rgb(0xffffff))
+                                            .child("Open PDF File"),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_1p5()
+                                            .py_0p5()
+                                            .rounded_sm()
+                                            .bg(rgb(0x27272a))
+                                            .text_color(rgb(0xa1a1aa))
+                                            .child(count_badge),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1p5()
+                                    .child(
+                                        div()
+                                            .id("file-picker-toggle-all")
+                                            .px_2()
+                                            .py_0p5()
+                                            .rounded_sm()
+                                            .cursor_pointer()
+                                            .bg(if show_all {
+                                                rgb(0x1e3a8a)
+                                            } else {
+                                                rgb(0x27272a)
+                                            })
+                                            .border_1()
+                                            .border_color(if show_all {
+                                                rgb(0x3b82f6)
+                                            } else {
+                                                rgb(0x3f3f46)
+                                            })
+                                            .text_color(rgb(0xf4f4f5))
+                                            .hover(|s| {
+                                                if show_all {
+                                                    s.bg(rgb(0x1d4ed8))
+                                                } else {
+                                                    s.bg(rgb(0x3f3f46))
+                                                }
+                                            })
+                                            .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                                cx.stop_propagation()
+                                            })
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.file_picker.show_all_files =
+                                                    !this.file_picker.show_all_files;
+                                                let count =
+                                                    this.file_picker.visible_entries().len();
+                                                if count == 0 {
+                                                    this.file_picker.selected_idx = 0;
+                                                } else {
+                                                    this.file_picker.selected_idx =
+                                                        this.file_picker.selected_idx.min(count - 1);
+                                                }
+                                                this.file_picker_scroll_handle
+                                                    .scroll_to_item(this.file_picker.selected_idx);
+                                                window.focus(&this.file_picker_focus_handle, cx);
+                                                cx.notify();
+                                            }))
+                                            .child("All Files"),
+                                    )
+                                    .child(toolbar_btn(
+                                        "file-picker-system-dialog",
+                                        "System Dialog...",
+                                        false,
+                                        cx.listener(|this, _, window, cx| {
+                                            this.close_file_picker_popup(window, cx);
+                                            this.prompt_open_file_native(cx);
+                                        }),
+                                    ))
+                                    .child(toolbar_btn(
+                                        "file-picker-close",
+                                        "Close",
+                                        false,
+                                        cx.listener(|this, _, window, cx| {
+                                            this.close_file_picker_popup(window, cx);
+                                        }),
+                                    )),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .px_3()
+                            .py_2()
+                            .bg(rgb(0x09090b))
+                            .border_b_1()
+                            .border_color(rgb(0x27272a))
+                            .text_xs()
+                            .child(
+                                div()
+                                    .id("file-picker-input-box")
+                                    .flex_1()
+                                    .min_w_0()
+                                    .px_2p5()
+                                    .py_1p5()
+                                    .rounded_sm()
+                                    .bg(rgb(0x18181b))
+                                    .border_1()
+                                    .border_color(rgb(0x3b82f6))
+                                    .flex()
+                                    .items_center()
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|this, _, window, cx| {
+                                            cx.stop_propagation();
+                                            window.focus(&this.file_picker_focus_handle, cx);
+                                        }),
+                                    )
+                                    .child(if input_empty {
+                                        div()
+                                            .text_color(rgb(0x71717a))
+                                            .child(input_display)
+                                            .into_any_element()
+                                    } else if self.file_picker.select_all {
+                                        div()
+                                            .px_1()
+                                            .rounded_sm()
+                                            .bg(rgb(0x2563eb))
+                                            .text_color(rgb(0xffffff))
+                                            .child(input_display)
+                                            .into_any_element()
+                                    } else {
+                                        div()
+                                            .text_color(rgb(0xffffff))
+                                            .child(input_display)
+                                            .into_any_element()
+                                    }),
+                            )
+                            .when_some(parent_dir, |row, parent| {
+                                row.child(toolbar_btn(
+                                    "file-picker-up",
+                                    "Up",
+                                    false,
+                                    cx.listener(move |this, _, window, cx| {
+                                        this.file_picker.set_directory(&parent);
+                                        this.file_picker_scroll_handle
+                                            .scroll_to_item(this.file_picker.selected_idx);
+                                        window.focus(&this.file_picker_focus_handle, cx);
+                                        cx.notify();
+                                    }),
+                                ))
+                            })
+                            .child(
+                                div()
+                                    .id("file-picker-ok")
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .cursor_pointer()
+                                    .bg(rgb(0x2563eb))
+                                    .hover(|s| s.bg(rgb(0x1d4ed8)))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xffffff))
+                                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                        cx.stop_propagation()
+                                    })
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.submit_file_picker(window, cx);
+                                    }))
+                                    .child("OK"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .px_3()
+                            .py_1()
+                            .bg(if status_banner.is_some() {
+                                rgb(0x451a03)
+                            } else {
+                                rgb(0x111827)
+                            })
+                            .border_b_1()
+                            .border_color(rgb(0x27272a))
+                            .text_xs()
+                            .text_color(if status_banner.is_some() {
+                                rgb(0xfcd34d)
+                            } else {
+                                rgb(0x9ca3af)
+                            })
+                            .child(if let Some((msg, _)) = status_banner {
+                                msg
+                            } else {
+                                "Type to filter · Cmd+V Paste path · Tab Complete · Opt+Backspace Up · Opt+Cmd+O Finder"
+                                    .to_string()
+                            }),
+                    )
+                    .child(
+                        div()
+                            .id("file-picker-list")
+                            .flex_initial()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .track_scroll(&self.file_picker_scroll_handle)
+                            .my_1p5()
+                            .px_2()
                             .flex()
                             .flex_col()
                             .gap_1()
@@ -4294,7 +5215,8 @@ impl WindowWorkspace {
                 self.pending_focus = Some(self.about_focus_handle.clone());
                 cx.notify();
             }
-            "quit" => cx.quit(),
+            "print" => self.trigger_print(cx),
+            "quit" => AppRegistry::quit_app(cx),
             other => return Err(format!("unknown IPC command: {other}")),
         }
         Ok(format!("executed {command}"))
@@ -4306,6 +5228,9 @@ impl WindowWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.welcome_mode {
+            return;
+        }
         if self.presentation_mode
             && event.keystroke.key == "escape"
             && !self.command_popup_open
@@ -4314,6 +5239,7 @@ impl WindowWorkspace {
             && !self.thumbnail_grid_open
             && !self.about_popup_open
             && !self.brand_menu_open
+            && !self.file_picker_open
             && self.library_modal.is_none()
             && !self.search_bar_open
         {
@@ -4335,6 +5261,7 @@ impl WindowWorkspace {
             || self.goto_page_open
             || self.thumbnail_grid_open
             || self.about_popup_open
+            || self.file_picker_open
             || self.library_modal.is_some()
             || self.search_bar_open
         {
@@ -4359,6 +5286,455 @@ impl WindowWorkspace {
             cx.stop_propagation();
         }
     }
+
+    fn handle_welcome_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.file_picker_open
+            || self.command_popup_open
+            || self.library_modal.is_some()
+            || self.about_popup_open
+            || self.brand_menu_open
+        {
+            return;
+        }
+        let ks = &event.keystroke;
+        if ks.modifiers.platform && !ks.modifiers.alt && !ks.modifiers.shift && ks.key == "w" {
+            if cx.windows().len() > 1 {
+                let vp_id = self.root.first_viewport().read(cx).id;
+                cx.update_global::<AppRegistry, _>(|reg, _| {
+                    reg.unregister_viewport(vp_id);
+                });
+                self.pending_close_window = true;
+                cx.notify();
+            }
+            cx.stop_propagation();
+            return;
+        }
+        if ks.modifiers.platform && ks.modifiers.alt && ks.key == "o" {
+            self.prompt_open_file_native(cx);
+            cx.stop_propagation();
+            return;
+        }
+        if !ks.modifiers.platform && !ks.modifiers.control && !ks.modifiers.alt {
+            match ks.key.as_str() {
+                "enter" | "o" => {
+                    self.open_file_picker_popup(window, cx);
+                    cx.stop_propagation();
+                }
+                "r" => {
+                    self.open_library_modal(LibraryModalKind::RecentDocs, window, cx);
+                    cx.stop_propagation();
+                }
+                "d" => {
+                    self.open_demo_session(cx);
+                    cx.stop_propagation();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn render_welcome_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let app_icon = cx.global::<AppRegistry>().app_icon.clone();
+        div()
+            .flex_shrink_0()
+            .w_full()
+            .min_h(px(36.))
+            .px_2p5()
+            .py_1()
+            .bg(rgb(0x18181b))
+            .border_b_1()
+            .border_color(rgb(0x27272a))
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .justify_between()
+            .gap_1p5()
+            .text_xs()
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_1p5()
+                    .child(
+                        div()
+                            .id("brand-menu-btn")
+                            .flex()
+                            .items_center()
+                            .gap_1p5()
+                            .px_2()
+                            .py_0p5()
+                            .rounded_sm()
+                            .cursor_pointer()
+                            .bg(if self.brand_menu_open {
+                                rgb(0x2563eb)
+                            } else {
+                                rgb(0x1e3a8a)
+                            })
+                            .hover(|s| s.bg(rgb(0x1d4ed8)))
+                            .text_color(rgb(0xe0f2fe))
+                            .font_weight(FontWeight::BOLD)
+                            .child(img(app_icon).size(px(16.)))
+                            .child("Pinleaf")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_brand_menu(window, cx);
+                            })),
+                    )
+                    .child(toolbar_btn(
+                        "welcome-tb-open",
+                        "Open (Cmd+O)",
+                        self.file_picker_open,
+                        cx.listener(|this, _, window, cx| this.toggle_file_picker_popup(window, cx)),
+                    ))
+                    .child(toolbar_btn(
+                        "welcome-tb-recent",
+                        "Recent (Shift+Cmd+O)",
+                        self.library_modal == Some(LibraryModalKind::RecentDocs),
+                        cx.listener(|this, _, window, cx| {
+                            this.toggle_library_modal(LibraryModalKind::RecentDocs, window, cx);
+                        }),
+                    ))
+                    .child(toolbar_btn(
+                        "welcome-tb-demo",
+                        "Demo Paper",
+                        false,
+                        cx.listener(|this, _, _, cx| this.open_demo_session(cx)),
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_1p5()
+                    .child(toolbar_btn(
+                        "welcome-tb-cmds",
+                        "/ Shortcuts",
+                        self.command_popup_open,
+                        cx.listener(|this, _, window, cx| this.toggle_command_popup(window, cx)),
+                    ))
+                    .child(toolbar_btn(
+                        "welcome-tb-about",
+                        "About",
+                        self.about_popup_open,
+                        cx.listener(|this, _, window, cx| this.open_about_popup(window, cx)),
+                    )),
+            )
+    }
+
+    fn render_welcome_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let app_icon = cx.global::<AppRegistry>().app_icon.clone();
+        let recent_docs: Vec<(String, PathBuf, u32)> = {
+            let reg = cx.global::<AppRegistry>();
+            reg.library
+                .documents
+                .iter()
+                .filter(|d| d.path.is_file())
+                .take(5)
+                .map(|d| (d.title.clone(), d.path.clone(), d.last_page))
+                .collect()
+        };
+
+        let option_row = |id: &'static str,
+                          title: &'static str,
+                          hint: &'static str,
+                          shortcut: &'static str,
+                          primary: bool,
+                          on_click: Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static>| {
+            div()
+                .id(id)
+                .flex_shrink_0()
+                .w_full()
+                .px_3()
+                .py_2()
+                .rounded_md()
+                .cursor_pointer()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .bg(if primary { rgb(0x1e3a8a) } else { rgb(0x18181b) })
+                .border_1()
+                .border_color(if primary { rgb(0x3b82f6) } else { rgb(0x27272a) })
+                .hover(|s| {
+                    if primary {
+                        s.bg(rgb(0x1d4ed8))
+                    } else {
+                        s.bg(rgb(0x27272a))
+                    }
+                })
+                .on_click(move |ev, window, app| on_click(ev, window, app))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap_0p5()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(rgb(0xffffff))
+                                .child(title),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(if primary { rgb(0xdbeafe) } else { rgb(0xa1a1aa) })
+                                .child(hint),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .px_2()
+                        .py_0p5()
+                        .rounded_sm()
+                        .bg(if primary { rgb(0x1d4ed8) } else { rgb(0x27272a) })
+                        .border_1()
+                        .border_color(if primary { rgb(0x60a5fa) } else { rgb(0x3f3f46) })
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(0xf4f4f5))
+                        .child(shortcut),
+                )
+        };
+
+        let ws_open = cx.entity();
+        let ws_finder = cx.entity();
+        let ws_recent = cx.entity();
+        let ws_highlights = cx.entity();
+        let ws_demo = cx.entity();
+        let ws_cmds = cx.entity();
+
+        div()
+            .id("welcome-screen")
+            .track_focus(&self.welcome_focus_handle)
+            .on_key_down(cx.listener(Self::handle_welcome_key_down))
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .overflow_y_scroll()
+            .bg(rgb(0x111114))
+            .text_color(rgb(0xf4f4f5))
+            .flex()
+            .flex_col()
+            .items_center()
+            .py_8()
+            .px_4()
+            .child(
+                div()
+                    .w(px(620.))
+                    .max_w_full()
+                    .flex_shrink_0()
+                    .flex()
+                    .flex_col()
+                    .gap_4()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_3p5()
+                            .pb_1()
+                            .child(img(app_icon).size(px(48.)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_0p5()
+                                    .child(
+                                        div()
+                                            .text_xl()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(rgb(0xffffff))
+                                            .child("No PDF Open"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(0xa1a1aa))
+                                            .child("Open a local PDF, pick a recent paper, or drop any .pdf file into this window."),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1p5()
+                            .child(option_row(
+                                "welcome-opt-open",
+                                "Open PDF File...",
+                                "Browse folders, filter files as you type, or paste a path",
+                                "Cmd+O",
+                                true,
+                                Box::new(move |_, window, app| {
+                                    ws_open.update(app, |this, cx| {
+                                        this.open_file_picker_popup(window, cx);
+                                    });
+                                }),
+                            ))
+                            .child(option_row(
+                                "welcome-opt-finder",
+                                "Open with macOS Finder...",
+                                "Choose a PDF from the native system file dialog",
+                                "Opt+Cmd+O",
+                                false,
+                                Box::new(move |_, _, app| {
+                                    ws_finder.update(app, |this, cx| {
+                                        this.prompt_open_file_native(cx);
+                                    });
+                                }),
+                            ))
+                            .child(option_row(
+                                "welcome-opt-recent",
+                                "Quick-Open Recent PDFs",
+                                "Fuzzy-search and reopen recently viewed papers",
+                                "Shift+Cmd+O",
+                                false,
+                                Box::new(move |_, window, app| {
+                                    ws_recent.update(app, |this, cx| {
+                                        this.open_library_modal(
+                                            LibraryModalKind::RecentDocs,
+                                            window,
+                                            cx,
+                                        );
+                                    });
+                                }),
+                            ))
+                            .child(option_row(
+                                "welcome-opt-highlights",
+                                "Search Highlights Across Library",
+                                "Search quotes and notes across indexed PDFs",
+                                "Shift+Cmd+F",
+                                false,
+                                Box::new(move |_, window, app| {
+                                    ws_highlights.update(app, |this, cx| {
+                                        this.open_library_modal(
+                                            LibraryModalKind::GlobalHighlights,
+                                            window,
+                                            cx,
+                                        );
+                                    });
+                                }),
+                            ))
+                            .child(option_row(
+                                "welcome-opt-demo",
+                                "Open Built-in Demo Paper",
+                                "Try Freeze & Split, Smart Jump, Portals, and Hints",
+                                "D",
+                                false,
+                                Box::new(move |_, _, app| {
+                                    ws_demo.update(app, |this, cx| {
+                                        this.open_demo_session(cx);
+                                    });
+                                }),
+                            ))
+                            .child(option_row(
+                                "welcome-opt-commands",
+                                "Commands & Shortcuts",
+                                "Browse all keyboard shortcuts and commands",
+                                "/",
+                                false,
+                                Box::new(move |_, window, app| {
+                                    ws_cmds.update(app, |this, cx| {
+                                        this.open_command_popup(window, cx);
+                                    });
+                                }),
+                            )),
+                    )
+                    .when(!recent_docs.is_empty(), |col| {
+                        col.child(
+                            div()
+                                .pt_1()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(rgb(0x93c5fd))
+                                        .child("Recent Documents"),
+                                )
+                                .children(recent_docs.into_iter().enumerate().map(
+                                    |(idx, (title, path, last_page))| {
+                                        let path_label = path.display().to_string();
+                                        div()
+                                            .id(("welcome-recent-doc", idx))
+                                            .flex_shrink_0()
+                                            .w_full()
+                                            .px_2p5()
+                                            .py_1p5()
+                                            .rounded_sm()
+                                            .cursor_pointer()
+                                            .bg(rgb(0x18181b))
+                                            .border_1()
+                                            .border_color(rgb(0x27272a))
+                                            .hover(|s| s.bg(rgb(0x27272a)))
+                                            .flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .gap_2()
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.open_or_switch_path_at_page(
+                                                    path.clone(),
+                                                    PageIndex(last_page),
+                                                    cx,
+                                                );
+                                            }))
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .flex()
+                                                    .flex_col()
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .font_weight(FontWeight::SEMIBOLD)
+                                                            .text_color(rgb(0xf4f4f5))
+                                                            .truncate()
+                                                            .child(title),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(rgb(0x71717a))
+                                                            .truncate()
+                                                            .child(path_label),
+                                                    ),
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex_shrink_0()
+                                                    .px_1p5()
+                                                    .py_0p5()
+                                                    .rounded_sm()
+                                                    .bg(rgb(0x27272a))
+                                                    .text_xs()
+                                                    .text_color(rgb(0xd4d4d8))
+                                                    .child(format!("p.{}", last_page + 1)),
+                                            )
+                                    },
+                                )),
+                        )
+                    })
+                    .child(
+                        div()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(rgb(0x71717a))
+                            .child("Tip: Drag & drop one or more .pdf files anywhere in this window  ·  Cmd+Q to quit"),
+                    ),
+            )
+    }
 }
 
 impl Render for WindowWorkspace {
@@ -4372,11 +5748,22 @@ impl Render for WindowWorkspace {
             window.focus(&fh, cx);
         }
 
+        let win_id = window.window_handle().window_id();
+        cx.update_global::<AppRegistry, _>(|reg, _| {
+            if self.welcome_mode {
+                reg.welcome_windows.insert(win_id);
+            } else {
+                reg.welcome_windows.remove(&win_id);
+            }
+        });
+
         let (doc_title, doc_dirty) = {
             let s = self.session.read(cx);
             (s.title.clone(), s.annotations.is_dirty())
         };
-        let desired_title = if doc_dirty {
+        let desired_title = if self.welcome_mode {
+            "Pinleaf".to_string()
+        } else if doc_dirty {
             format!("Pinleaf — {doc_title} *")
         } else {
             format!("Pinleaf — {doc_title}")
@@ -4386,7 +5773,46 @@ impl Render for WindowWorkspace {
             window.set_window_title(&desired_title);
         }
 
-        let tree_view = self.render_split_node(&self.root, cx);
+        let top_bar: Option<AnyElement> = if self.welcome_mode {
+            Some(self.render_welcome_toolbar(cx).into_any_element())
+        } else if !self.presentation_mode {
+            Some(self.render_toolbar(cx).into_any_element())
+        } else {
+            None
+        };
+
+        let body: AnyElement = if self.welcome_mode {
+            div()
+                .relative()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .child(self.render_welcome_screen(cx))
+                .children(self.render_status_toast(cx))
+                .into_any_element()
+        } else {
+            let tree_view = self.render_split_node(&self.root, cx);
+            div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_row()
+                .when(self.thumbnails_open && !self.presentation_mode, |row| {
+                    row.child(self.render_thumbnails_strip(cx))
+                })
+                .child(
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_w_0()
+                        .min_h_0()
+                        .child(tree_view)
+                        .children(self.render_status_toast(cx)),
+                )
+                .when(self.sidebar_open, |row| row.child(self.render_sidebar(cx)))
+                .into_any_element()
+        };
 
         div()
             .id("workspace-root")
@@ -4395,45 +5821,84 @@ impl Render for WindowWorkspace {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0xe4e4e7))
-            .on_action(cx.listener(|this, _: &OpenFile, _, cx| this.prompt_open_file(cx)))
+            .bg(if self.welcome_mode {
+                rgb(0x111114)
+            } else {
+                rgb(0xe4e4e7)
+            })
+            .on_action(cx.listener(|this, _: &OpenFile, window, cx| {
+                this.toggle_file_picker_popup(window, cx);
+            }))
             .on_action(cx.listener(|this, _: &OpenDemo, _, cx| this.open_demo_session(cx)))
             .on_action(cx.listener(|this, _: &ShowAbout, window, cx| this.open_about_popup(window, cx)))
-            .on_action(cx.listener(|this, _: &SavePdf, _, cx| this.trigger_save(false, cx)))
-            .on_action(cx.listener(|this, _: &SavePdfAs, _, cx| this.trigger_save(true, cx)))
+            .on_action(cx.listener(|this, _: &SavePdf, _, cx| {
+                if !this.welcome_mode {
+                    this.trigger_save(false, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &SavePdfAs, _, cx| {
+                if !this.welcome_mode {
+                    this.trigger_save(true, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &PrintDocument, _, cx| {
+                if !this.welcome_mode {
+                    this.trigger_print(cx);
+                }
+            }))
             .on_action(cx.listener(|this, _: &UndoAnnot, _, cx| {
-                this.session.update(cx, |s, cx| s.undo(cx));
+                if !this.welcome_mode {
+                    this.session.update(cx, |s, cx| s.undo(cx));
+                }
             }))
             .on_action(cx.listener(|this, _: &RedoAnnot, _, cx| {
-                this.session.update(cx, |s, cx| s.redo(cx));
+                if !this.welcome_mode {
+                    this.session.update(cx, |s, cx| s.redo(cx));
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
-                this.sidebar_open = !this.sidebar_open;
-                cx.notify();
+                if !this.welcome_mode {
+                    this.sidebar_open = !this.sidebar_open;
+                    cx.notify();
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleCommandPopup, window, cx| {
                 this.toggle_command_popup(window, cx);
             }))
             .on_action(cx.listener(|this, _: &OpenSearch, window, cx| {
-                this.open_search_bar(window, cx);
+                if !this.welcome_mode {
+                    this.open_search_bar(window, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &NextSearchMatch, _, cx| {
-                this.step_search(1, cx);
+                if !this.welcome_mode {
+                    this.step_search(1, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &PrevSearchMatch, _, cx| {
-                this.step_search(-1, cx);
+                if !this.welcome_mode {
+                    this.step_search(-1, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleTocPopup, window, cx| {
-                this.toggle_toc_popup(window, cx);
+                if !this.welcome_mode {
+                    this.toggle_toc_popup(window, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &GoToPage, window, cx| {
-                this.open_goto_page_popup(window, cx);
+                if !this.welcome_mode {
+                    this.open_goto_page_popup(window, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleThumbnails, _, cx| {
-                this.toggle_thumbnails(cx);
+                if !this.welcome_mode {
+                    this.toggle_thumbnails(cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleThumbnailGrid, window, cx| {
-                this.toggle_thumbnail_grid(window, cx);
+                if !this.welcome_mode {
+                    this.toggle_thumbnail_grid(window, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &OpenRecentPopup, window, cx| {
                 this.toggle_library_modal(LibraryModalKind::RecentDocs, window, cx);
@@ -4445,16 +5910,24 @@ impl Render for WindowWorkspace {
                 this.toggle_library_modal(LibraryModalKind::Extensions, window, cx);
             }))
             .on_action(cx.listener(|this, _: &ToggleAutoReload, _, cx| {
-                this.session.update(cx, |s, cx| s.toggle_auto_reload(cx));
+                if !this.welcome_mode {
+                    this.session.update(cx, |s, cx| s.toggle_auto_reload(cx));
+                }
             }))
             .on_action(cx.listener(|this, _: &CycleColorMode, _, cx| {
-                this.session.update(cx, |s, cx| s.cycle_color_mode(cx));
+                if !this.welcome_mode {
+                    this.session.update(cx, |s, cx| s.cycle_color_mode(cx));
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleSmartDarkMode, _, cx| {
-                this.session.update(cx, |s, cx| s.toggle_smart_dark_mode(cx));
+                if !this.welcome_mode {
+                    this.session.update(cx, |s, cx| s.toggle_smart_dark_mode(cx));
+                }
             }))
             .on_action(cx.listener(|this, _: &TogglePresentationMode, window, cx| {
-                this.toggle_presentation_mode(window, cx);
+                if !this.welcome_mode {
+                    this.toggle_presentation_mode(window, cx);
+                }
             }))
             .on_key_down(cx.listener(Self::handle_workspace_key_down))
             .on_drop(cx.listener(|this, dropped: &gpui::ExternalPaths, window, cx| {
@@ -4509,35 +5982,17 @@ impl Render for WindowWorkspace {
                     this.active_split_drag = None;
                 }),
             )
-            .when(!self.presentation_mode, |root| {
-                root.child(self.render_toolbar(cx))
-            })
-            .when(self.search_bar_open, |root| {
+            .children(top_bar)
+            .when(!self.welcome_mode && self.search_bar_open, |root| {
                 root.child(self.render_search_bar(cx))
             })
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .flex_row()
-                    .when(self.thumbnails_open && !self.presentation_mode, |row| {
-                        row.child(self.render_thumbnails_strip(cx))
-                    })
-                    .child(
-                        div()
-                            .relative()
-                            .flex_1()
-                            .min_w_0()
-                            .min_h_0()
-                            .child(tree_view)
-                            .children(self.render_status_toast(cx)),
-                    )
-                    .when(self.sidebar_open, |row| row.child(self.render_sidebar(cx))),
-            )
+            .child(body)
             .when(self.toc_popup_open, |root| root.child(self.render_toc_popup(cx)))
             .when_some(self.library_modal, |root, kind| {
                 root.child(self.render_library_modal(kind, cx))
+            })
+            .when(self.file_picker_open, |root| {
+                root.child(self.render_file_picker_popup(cx))
             })
             .when(self.thumbnail_grid_open, |root| {
                 root.child(self.render_thumbnail_grid_modal(cx))

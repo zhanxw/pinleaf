@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{AnyWindowHandle, App, BorrowAppContext, Entity, Global, RenderImage, WeakEntity, Window};
+use gpui::{
+    AnyWindowHandle, App, BorrowAppContext, Entity, Global, RenderImage, WeakEntity, Window,
+    WindowId,
+};
 use pinleaf_core::{
     FreezeState, PageIndex, ReadingTrailGraph, RgbaColor, TrailNode, ViewportId,
     find_active_portal, highlight_category_spec,
@@ -33,6 +36,8 @@ pub struct AppRegistry {
     pub app_icon: Arc<RenderImage>,
     pub library: LibraryStore,
     pub user_config: UserConfig,
+    pub welcome_windows: HashSet<WindowId>,
+    pub quitting: bool,
 }
 
 impl Global for AppRegistry {}
@@ -48,7 +53,16 @@ impl AppRegistry {
             app_icon: crate::icon::build_gpui_app_icon(64),
             library: LibraryStore::load(),
             user_config: UserConfig::load(),
+            welcome_windows: HashSet::new(),
+            quitting: false,
         });
+    }
+
+    pub fn quit_app(cx: &mut App) {
+        cx.update_global::<AppRegistry, _>(|reg, _| {
+            reg.quitting = true;
+        });
+        cx.quit();
     }
 
     pub fn prepare_session_model(&self, session: &mut DocumentSession) {

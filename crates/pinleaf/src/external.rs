@@ -191,6 +191,72 @@ pub fn run_synctex_inverse_editor(
     )
 }
 
+#[cfg(target_os = "macos")]
+#[link(name = "PDFKit", kind = "framework")]
+unsafe extern "C" {}
+
+/// Opens the native OS print dialog (macOS `PDFKit` + `NSPrintOperation`) or
+/// submits via `lpr` on Unix platforms, preserving vectors and annotations.
+/// Returns `Ok(true)` if submitted, `Ok(false)` if the user cancelled.
+pub fn print_pdf_bytes(pdf_bytes: &[u8], job_title: &str) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::msg_send;
+        use objc2::rc::{Allocated, Retained};
+        use objc2::runtime::{AnyClass, AnyObject};
+        use objc2_app_kit::{NSPrintInfo, NSPrintOperation};
+        use objc2_foundation::{NSData, NSString};
+
+        let Some(cls) = AnyClass::get(c"PDFDocument") else {
+            return Err("PDFKit framework unavailable".to_string());
+        };
+        let ns_data = NSData::with_bytes(pdf_bytes);
+        let pdf_doc: Option<Retained<AnyObject>> = unsafe {
+            let allocated: Allocated<AnyObject> = msg_send![cls, alloc];
+            msg_send![allocated, initWithData: &*ns_data]
+        };
+        let Some(pdf_doc) = pdf_doc else {
+            return Err("Failed to initialize PDF document for printing".to_string());
+        };
+
+        let print_info = NSPrintInfo::sharedPrintInfo();
+        // kPDFPrintPageScaleToFit = 1
+        let print_op: Option<Retained<NSPrintOperation>> = unsafe {
+            msg_send![
+                &*pdf_doc,
+                printOperationForPrintInfo: &*print_info,
+                scalingMode: 1isize,
+                autoRotate: true
+            ]
+        };
+        let Some(print_op) = print_op else {
+            return Err("Failed to create macOS print operation".to_string());
+        };
+
+        let ns_title = NSString::from_str(job_title);
+        print_op.setJobTitle(Some(&ns_title));
+        Ok(print_op.runOperation())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let tmp_path = std::env::temp_dir().join(format!("pinleaf-print-{}.pdf", uuid::Uuid::new_v4()));
+        std::fs::write(&tmp_path, pdf_bytes)
+            .map_err(|e| format!("Failed to stage temporary PDF for printing: {e}"))?;
+        let status = Command::new("lpr")
+            .arg("-T")
+            .arg(job_title)
+            .arg(&tmp_path)
+            .status();
+        let _ = std::fs::remove_file(&tmp_path);
+        match status {
+            Ok(s) if s.success() => Ok(true),
+            Ok(s) => Err(format!("lpr exited with status {s}")),
+            Err(e) => Err(format!("Failed to launch lpr: {e}")),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
