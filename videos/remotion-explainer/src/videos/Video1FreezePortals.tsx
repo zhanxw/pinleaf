@@ -27,7 +27,7 @@ const Scene1FreezeSplit: React.FC = () => {
   const panes = isSplit
     ? [
         {
-          label: 'Pane #1 • Introduction (Anchor Locked)',
+          label: 'Pane #1 • Intro (Locked)',
           frozen: true,
           pageProps: {
             pageNumber: 1,
@@ -36,12 +36,12 @@ const Scene1FreezeSplit: React.FC = () => {
           },
         },
         {
-          label: 'Pane #2 • Theorem & Proof Branch',
+          label: 'Pane #2 • Theorem Branch',
           active: true,
           pageProps: {
             pageNumber: 3,
             focusSection: 'theorem' as const,
-            scrollOffsetPx: Math.round(interpolate(splitEnter, [0, 1], [30, 0])),
+            scrollOffsetPx: Math.round(interpolate(splitEnter, [0, 1], [26, 0])),
           },
         },
       ]
@@ -74,7 +74,7 @@ const Scene1FreezeSplit: React.FC = () => {
       panes={panes}
       statusBanner={
         isSplit
-          ? { text: 'Split active: #1 🔒 stays pinned while #2 scrolls freely', tone: 'ok' }
+          ? { text: '#1 🔒 pinned while #2 scrolls freely', tone: 'ok' }
           : undefined
       }
     />
@@ -88,11 +88,11 @@ const Scene2TrailSmartRoute: React.FC = () => {
   const clickAt = Math.round(durationInFrames * 0.48);
   const clicked = frame >= clickAt;
 
-  const cursorX = interpolate(frame, [10, clickAt - 8], [32, 16.5], {
+  const cursorX = interpolate(frame, [10, clickAt - 8], [30, 15.5], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const cursorY = interpolate(frame, [10, clickAt - 8], [72, 24.5], {
+  const cursorY = interpolate(frame, [10, clickAt - 8], [72, 26], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -100,8 +100,8 @@ const Scene2TrailSmartRoute: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
       <PinleafWindow
-        heightPx={675}
-        keyPressChip={clicked ? 'Clicked Theorem 2 in #1 🔒 → Smart-Routed #3' : '3-Generation Trail'}
+        heightPx={778}
+        keyPressChip={clicked ? 'Clicked Theorem 2 in #1 🔒 → Routed #3' : '3-Generation Trail'}
         trailNodes={[
           { id: 1, frozen: true },
           { id: 2, frozen: true },
@@ -109,7 +109,7 @@ const Scene2TrailSmartRoute: React.FC = () => {
         ]}
         panes={[
           {
-            label: 'Pane #1 • Intro (Anchored)',
+            label: 'Pane #1 • Intro',
             frozen: true,
             pageProps: {
               pageNumber: 1,
@@ -118,12 +118,12 @@ const Scene2TrailSmartRoute: React.FC = () => {
             },
           },
           {
-            label: 'Pane #2 • Benchmark (Anchored)',
+            label: 'Pane #2 • Benchmarks',
             frozen: true,
             pageProps: { pageNumber: 3, focusSection: 'figure' },
           },
           {
-            label: clicked ? 'Pane #3 • Theorem 2 (Smart-Routed)' : 'Pane #3 • Derivation',
+            label: clicked ? 'Pane #3 • Theorem 2' : 'Pane #3 • Eq. (4)',
             active: true,
             pageProps: {
               pageNumber: clicked ? 6 : 4,
@@ -138,7 +138,7 @@ const Scene2TrailSmartRoute: React.FC = () => {
         }}
       />
 
-      <div style={{ display: 'flex', gap: 14, fontFamily: FONT_SANS }}>
+      <div style={{ display: 'flex', gap: 16, fontFamily: FONT_SANS }}>
         {[
           { k: '⇧⌘D', l: 'Split Down' },
           { k: '⇧⌘N', l: 'Freeze & New Window' },
@@ -148,17 +148,18 @@ const Scene2TrailSmartRoute: React.FC = () => {
           <div
             key={chip.k}
             style={{
-              padding: '7px 14px',
-              borderRadius: 10,
-              backgroundColor: 'rgba(15, 23, 42, 0.85)',
-              border: '1px solid rgba(52, 211, 153, 0.35)',
-              fontSize: 14,
-              color: '#e2e8f0',
+              padding: '9px 18px',
+              borderRadius: 11,
+              backgroundColor: 'rgba(15, 23, 42, 0.9)',
+              border: '1.5px solid rgba(52, 211, 153, 0.45)',
+              fontSize: 19,
+              fontWeight: 700,
+              color: '#f1f5f9',
               display: 'flex',
-              gap: 8,
+              gap: 10,
             }}
           >
-            <span style={{ fontFamily: FONT_MONO, fontWeight: 700, color: '#34d399' }}>{chip.k}</span>
+            <span style={{ fontFamily: FONT_MONO, fontWeight: 800, color: '#34d399' }}>{chip.k}</span>
             <span>{chip.l}</span>
           </div>
         ))}
@@ -180,10 +181,10 @@ const Scene3ScrollPortals: React.FC = () => {
     <PinleafWindow
       keyPressChip={
         frame < linkAt
-          ? 'Inspecting Intro + Figure 1'
+          ? 'Reading Section 1 + Figure 1'
           : frame < followerAt
           ? 'Pressed  P  →  Linked Portal [P1]'
-          : 'Pressed  ⇧P  →  Portal Follower Enabled'
+          : 'Pressed  ⇧P  →  Portal Follower ON'
       }
       trailNodes={[
         { id: 1, frozen: false, active: !followerOn },
@@ -191,13 +192,13 @@ const Scene3ScrollPortals: React.FC = () => {
       ]}
       panes={[
         {
-          label: 'Source Pane • Section 1 (Primary Reader)',
+          label: 'Source Pane • Section 1',
           active: true,
           pageProps: {
             pageNumber: 1,
             focusSection: 'intro',
             portalMarginMarkers: portalLinked
-              ? [{ topPx: 148, label: 'P1→Fig.1', active: true }]
+              ? [{ topPx: 145, label: 'P1→Fig.1', active: true }]
               : [],
             pulseFigureRef: portalLinked && !followerOn,
           },
@@ -214,7 +215,7 @@ const Scene3ScrollPortals: React.FC = () => {
       ]}
       statusBanner={
         followerOn
-          ? { text: 'P: Link Portal  •  ⇧P: Toggle Follower  •  ⌥P: Delete Nearest', tone: 'info' }
+          ? { text: 'P: Link Portal • ⇧P: Follower • ⌥P: Delete', tone: 'info' }
           : undefined
       }
     />
@@ -226,7 +227,7 @@ const Scene4AutoPortalSwitch: React.FC = () => {
   const { durationInFrames } = useVideoConfig();
 
   const scrollPx = Math.round(
-    interpolate(frame, [15, durationInFrames - 20], [0, 128], {
+    interpolate(frame, [15, durationInFrames - 20], [0, 120], {
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     }),
@@ -237,7 +238,7 @@ const Scene4AutoPortalSwitch: React.FC = () => {
   return (
     <PinleafWindow
       keyPressChip={
-        switchedToEq4 ? 'Scrolled to [P2] → Portal Auto-Switched' : 'Scrolling Past [P1]…'
+        switchedToEq4 ? 'Scrolled to [P2] → Auto-Switched' : 'Scrolling Past [P1]…'
       }
       panes={[
         {
@@ -248,8 +249,8 @@ const Scene4AutoPortalSwitch: React.FC = () => {
             focusSection: 'intro',
             scrollOffsetPx: scrollPx,
             portalMarginMarkers: [
-              { topPx: Math.max(70, 130 - scrollPx * 0.55), label: 'P1→Fig.1', active: !switchedToEq4 },
-              { topPx: Math.max(130, 260 - scrollPx * 0.75), label: 'P2→Eq.(4)', active: switchedToEq4 },
+              { topPx: Math.max(76, 145 - scrollPx * 0.55), label: 'P1→Fig.1', active: !switchedToEq4 },
+              { topPx: Math.max(150, 295 - scrollPx * 0.8), label: 'P2→Eq.(4)', active: switchedToEq4 },
             ],
           },
         },
@@ -265,7 +266,7 @@ const Scene4AutoPortalSwitch: React.FC = () => {
       ]}
       statusBanner={{
         text: switchedToEq4
-          ? 'Synced [P2] Equation (4) • Persisted per PDF in LibraryStore'
+          ? 'Synced [P2] Equation (4) • Saved in LibraryStore'
           : 'Synced [P1] Figure 1 (p.3)',
         tone: 'ok',
       }}

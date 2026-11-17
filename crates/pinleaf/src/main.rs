@@ -343,6 +343,23 @@ fn handle_ipc_request(req: IpcRequest, cx: &mut App) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("pinleaf {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!(
+            "Pinleaf {} — Multi-view academic PDF reader\n\n\
+USAGE:\n  \
+  pinleaf [PDF_FILE...]\n  \
+  pinleaf --synctex-forward <line[:col]:file.tex> <paper.pdf>\n  \
+  pinleaf --execute-command <command> [args...]\n  \
+  pinleaf --self-test\n  \
+  pinleaf --version | --help",
+            env!("CARGO_PKG_VERSION")
+        );
+        return;
+    }
     if args.iter().any(|a| a == "--self-test") {
         run_self_test().expect("self-test failed");
         return;

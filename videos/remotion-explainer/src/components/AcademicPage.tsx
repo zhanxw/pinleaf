@@ -66,7 +66,6 @@ export function getThemePalette(theme: PinleafTheme) {
         refColor: '#9a3412',
       };
     case 'custom':
-      // Matches UserConfig test custom theme: bg #1e1e2e, fg #cdd6f4
       return {
         canvasBg: '#181825',
         pageBg: '#1e1e2e',
@@ -82,9 +81,9 @@ export function getThemePalette(theme: PinleafTheme) {
       return {
         canvasBg: '#e4e4e7',
         pageBg: '#ffffff',
-        textPrimary: '#1e293b',
+        textPrimary: '#0f172a',
         textMuted: '#475569',
-        heading: '#0f172a',
+        heading: '#020617',
         border: '#cbd5e1',
         boxBg: '#f1f5f9',
         refColor: '#1d4ed8',
@@ -122,9 +121,9 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
           width: '100%',
           height: '100%',
           backgroundColor: '#f8fafc',
-          borderRadius: 10,
+          borderRadius: 12,
           border: '1px solid #cbd5e1',
-          padding: '44px 56px',
+          padding: '38px 54px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -135,8 +134,8 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
         <div>
           <div
             style={{
-              fontSize: 16,
-              fontWeight: 700,
+              fontSize: 20,
+              fontWeight: 800,
               color: '#059669',
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
@@ -144,38 +143,38 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
           >
             Pinleaf Architecture Talk • Slide 4 / 12
           </div>
-          <h2 style={{ fontSize: 40, fontWeight: 800, margin: '10px 0 18px', letterSpacing: '-0.02em' }}>
+          <h2 style={{ fontSize: 46, fontWeight: 800, margin: '8px 0 18px', letterSpacing: '-0.02em' }}>
             Multi-View Freeze-and-Branch Reading
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 26 }}>
             <div
               style={{
                 backgroundColor: '#ecfdf5',
-                border: '1.5px solid #34d399',
+                border: '2px solid #34d399',
                 borderRadius: 14,
                 padding: 22,
               }}
             >
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#065f46', marginBottom: 8 }}>
+              <div style={{ fontSize: 25, fontWeight: 800, color: '#065f46', marginBottom: 8 }}>
                 N-Node Reading Trail
               </div>
-              <div style={{ fontSize: 16, color: '#1e293b', lineHeight: 1.55 }}>
-                Freeze any source proof (#1 🔒 → #2 🔒) while routing Smart Jumps cleanly to active child pane #3.
+              <div style={{ fontSize: 20, color: '#1e293b', lineHeight: 1.45 }}>
+                Freeze source proofs (#1 🔒 → #2 🔒) while routing Smart Jumps cleanly to pane #3.
               </div>
             </div>
             <div
               style={{
                 backgroundColor: '#eff6ff',
-                border: '1.5px solid #60a5fa',
+                border: '2px solid #60a5fa',
                 borderRadius: 14,
                 padding: 22,
               }}
             >
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>
+              <div style={{ fontSize: 25, fontWeight: 800, color: '#1e40af', marginBottom: 8 }}>
                 Native ISO-32000 /Annots
               </div>
-              <div style={{ fontSize: 16, color: '#1e293b', lineHeight: 1.55 }}>
-                26 typed highlight categories saved atomically directly into the PDF without proprietary sidecars.
+              <div style={{ fontSize: 20, color: '#1e293b', lineHeight: 1.45 }}>
+                26 typed highlight buckets saved atomically inside the PDF without proprietary sidecars.
               </div>
             </div>
           </div>
@@ -184,17 +183,17 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
         {/* Crisp mini chart */}
         <div
           style={{
-            height: 150,
+            height: 175,
             borderRadius: 12,
             backgroundColor: '#f1f5f9',
             border: '1px solid #cbd5e1',
-            padding: '14px 22px',
+            padding: '16px 24px',
             display: 'flex',
             alignItems: 'flex-end',
-            gap: 20,
+            gap: 22,
           }}
         >
-          {[42, 68, 84, 96, 118].map((h, i) => (
+          {[52, 78, 96, 112, 134].map((h, i) => (
             <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
               <div
                 style={{
@@ -204,7 +203,7 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
                   background: i >= 3 ? 'linear-gradient(180deg, #10b981, #059669)' : '#64748b',
                 }}
               />
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#334155' }}>
                 {['Preview', 'Okular', 'Skim', 'Sioyek', 'Pinleaf'][i]}
               </span>
             </div>
@@ -218,7 +217,7 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
     <div
       style={{
         position: 'relative',
-        width: fitContent ? '98%' : '90%',
+        width: fitContent ? '98%' : '93%',
         height: '100%',
         margin: '0 auto',
         backgroundColor: pal.pageBg,
@@ -228,10 +227,10 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
         boxShadow: '0 8px 28px rgba(0, 0, 0, 0.16)',
         overflow: 'hidden',
         padding: fitContent
-          ? '18px 18px'
+          ? '18px 20px'
           : portalMarginMarkers.length > 0
-          ? '22px 30px 22px 46px'
-          : '22px 34px',
+          ? '20px 26px 20px 66px'
+          : '20px 30px',
         fontFamily: '"Georgia", "Times New Roman", serif',
       }}
     >
@@ -241,32 +240,32 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
           key={idx}
           style={{
             position: 'absolute',
-            left: 6,
+            left: 8,
             top: m.topPx,
             display: 'flex',
             alignItems: 'center',
-            gap: 3,
+            gap: 4,
             zIndex: 4,
           }}
         >
           <div
             style={{
-              width: 5,
-              height: 26,
+              width: 6,
+              height: 32,
               borderRadius: 999,
               backgroundColor: m.active ? '#10b981' : '#64748b',
-              boxShadow: m.active ? '0 0 10px rgba(16,185,129,0.7)' : 'none',
+              boxShadow: m.active ? '0 0 12px rgba(16,185,129,0.75)' : 'none',
             }}
           />
           <span
             style={{
               fontFamily: FONT_MONO,
-              fontSize: 9.5,
+              fontSize: 15.5,
               fontWeight: 800,
               color: m.active ? '#059669' : pal.textMuted,
-              backgroundColor: m.active ? 'rgba(16,185,129,0.16)' : 'rgba(148,163,184,0.12)',
-              padding: '1px 4px',
-              borderRadius: 4,
+              backgroundColor: m.active ? 'rgba(16,185,129,0.18)' : 'rgba(148,163,184,0.14)',
+              padding: '3px 7px',
+              borderRadius: 5,
             }}
           >
             {m.label.split('→')[0]}
@@ -287,25 +286,27 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             display: 'flex',
             justifyContent: 'space-between',
             fontFamily: FONT_SANS,
-            fontSize: 11,
+            fontSize: 15.5,
+            fontWeight: 600,
             color: pal.textMuted,
             borderBottom: `1px solid ${pal.border}`,
             paddingBottom: 6,
-            marginBottom: 12,
+            marginBottom: 10,
           }}
         >
-          <span>Scalable Multi-View Document Architectures • Rev {autoReloadVersion}.0</span>
+          <span>Scalable Multi-View PDF Architectures • Rev {autoReloadVersion}.0</span>
           <span>Page {pageNumber} of 12</span>
         </div>
 
         <div
           style={{
             fontFamily: FONT_SANS,
-            fontSize: 21,
-            fontWeight: 700,
+            fontSize: 28,
+            fontWeight: 800,
             color: pal.heading,
-            lineHeight: 1.24,
+            lineHeight: 1.2,
             marginBottom: 6,
+            letterSpacing: '-0.02em',
           }}
         >
           {focusSection === 'theorem'
@@ -314,49 +315,58 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             ? '4. Empirical Latency & Memory Benchmarks'
             : focusSection === 'equation'
             ? '5. Variational Scaling Formulation'
-            : 'Attention-Preserving Split Graphs for Academic PDFs'}
+            : 'Attention-Preserving Split Graphs for PDFs'}
         </div>
 
         <div
           style={{
             fontFamily: FONT_SANS,
-            fontSize: 12,
+            fontSize: 16.5,
+            fontWeight: 600,
             color: pal.textMuted,
             marginBottom: 14,
           }}
         >
-          E. Vance, M. Tanaka • Dept. of Computer Science • DOI:{' '}
+          E. Vance, M. Tanaka • DOI:{' '}
           <span style={{ color: pal.refColor }}>10.1145/3597503.3623310</span>
         </div>
 
-        {/* Two-column layout matching academic papers */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22, fontSize: 13.5, lineHeight: 1.54 }}>
+        {/* Concise two-column layout scaled for clear GIF legibility */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 22,
+            fontSize: 18.5,
+            lineHeight: 1.44,
+          }}
+        >
           {/* Column 1 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ margin: 0 }}>
-              <strong style={{ fontFamily: FONT_SANS, color: pal.heading }}>1. Introduction.</strong>{' '}
-              Reading technical manuscripts rarely proceeds strictly top-to-bottom. Readers inspect{' '}
+              <strong style={{ fontFamily: FONT_SANS, color: pal.heading }}>1. Intro.</strong>{' '}
+              Readers inspect{' '}
               <span
                 style={{
                   color: pal.refColor,
-                  fontWeight: 700,
-                  backgroundColor: pulseTheoremRef ? 'rgba(59, 130, 246, 0.22)' : 'transparent',
-                  padding: '0 3px',
+                  fontWeight: 800,
+                  backgroundColor: pulseTheoremRef ? 'rgba(59, 130, 246, 0.24)' : 'transparent',
+                  padding: '0 4px',
                   borderRadius: 4,
-                  outline: pulseTheoremRef ? '2px solid #3b82f6' : 'none',
+                  outline: pulseTheoremRef ? '2.5px solid #3b82f6' : 'none',
                 }}
               >
                 Theorem 2
               </span>{' '}
-              while verifying empirical ablation plots in{' '}
+              while checking empirical plots in{' '}
               <span
                 style={{
                   color: pal.refColor,
-                  fontWeight: 700,
-                  backgroundColor: pulseFigureRef ? 'rgba(16, 185, 129, 0.24)' : 'transparent',
-                  padding: '0 3px',
+                  fontWeight: 800,
+                  backgroundColor: pulseFigureRef ? 'rgba(16, 185, 129, 0.26)' : 'transparent',
+                  padding: '0 4px',
                   borderRadius: 4,
-                  outline: pulseFigureRef ? '2px solid #10b981' : 'none',
+                  outline: pulseFigureRef ? '2.5px solid #10b981' : 'none',
                 }}
               >
                 Figure 1
@@ -367,21 +377,19 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             <div
               style={{
                 backgroundColor: pal.boxBg,
-                borderLeft: '3px solid #3b82f6',
-                padding: '9px 11px',
-                borderRadius: '0 6px 6px 0',
-                fontSize: 13,
+                borderLeft: '5px solid #3b82f6',
+                padding: '11px 14px',
+                borderRadius: '0 8px 8px 0',
+                fontSize: 18,
               }}
             >
-              <strong style={{ fontFamily: FONT_SANS, color: pal.heading }}>Theorem 1 (Anchored Stability).</strong>{' '}
-              Given a frozen source anchor <span style={{ fontFamily: FONT_MONO }}>a₀</span>, smart-routing
-              child transitions preserves context entropy across <span style={{ fontFamily: FONT_MONO }}>k</span>{' '}
-              branches{' '}
+              <strong style={{ fontFamily: FONT_SANS, color: pal.heading }}>Theorem 1 (Anchored).</strong>{' '}
+              Frozen anchor <span style={{ fontFamily: FONT_MONO }}>a₀</span> routes branches{' '}
               <span
                 style={{
-                  backgroundColor: activeSelectionText ? 'rgba(250, 204, 21, 0.45)' : 'transparent',
-                  borderRadius: 3,
-                  padding: '0 2px',
+                  backgroundColor: activeSelectionText ? 'rgba(250, 204, 21, 0.5)' : 'transparent',
+                  borderRadius: 4,
+                  padding: '0 3px',
                 }}
               >
                 without losing spatial recall
@@ -390,36 +398,30 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             </div>
 
             <p style={{ margin: 0 }}>
-              Prior studies on document navigation{' '}
+              Prior work{' '}
               <span
                 style={{
                   color: pal.refColor,
-                  fontWeight: 700,
-                  backgroundColor: pulseCitationRef ? 'rgba(139, 92, 246, 0.22)' : 'transparent',
-                  padding: '0 3px',
+                  fontWeight: 800,
+                  backgroundColor: pulseCitationRef ? 'rgba(139, 92, 246, 0.24)' : 'transparent',
+                  padding: '0 4px',
                   borderRadius: 4,
                 }}
               >
                 [12]
               </span>{' '}
-              demonstrate that single-pane scrolling induces up to 3.4x higher cognitive switch cost than pinned
-              reference split views and paired portals.
-            </p>
-
-            <p style={{ margin: 0 }}>
-              Under Eq. (4), tile cache eviction stays bounded by <span style={{ fontFamily: FONT_MONO }}>O(V)</span>{' '}
-              for active panes when zoom scales lock independently per reading node.
+              shows split views cut switch cost by 3.4× under Eq. (4) bounds.
             </p>
           </div>
 
           {/* Column 2 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* Figure card (demonstrates Smart Dark Mode Figure Preservation) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Figure card */}
             <div
               style={{
-                borderRadius: 8,
-                border: `1px solid ${pal.border}`,
-                padding: 10,
+                borderRadius: 10,
+                border: `1.5px solid ${pal.border}`,
+                padding: 12,
                 backgroundColor: invertFigure ? '#0f172a' : '#ffffff',
                 color: invertFigure ? '#f8fafc' : '#0f172a',
               }}
@@ -429,57 +431,55 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
                   display: 'flex',
                   justifyContent: 'space-between',
                   fontFamily: FONT_SANS,
-                  fontSize: 11,
-                  fontWeight: 700,
+                  fontSize: 15.5,
+                  fontWeight: 800,
                   marginBottom: 8,
                 }}
               >
                 <span>
-                  {focusSection === 'equation'
-                    ? 'Equation (4) • Convergence Rate'
-                    : 'Figure 1 • Branch Switch Cost (ms)'}
+                  {focusSection === 'equation' ? 'Equation (4)' : 'Figure 1 • Switch Cost'}
                 </span>
                 <span style={{ color: invertFigure ? '#f87171' : '#059669' }}>
-                  {invertFigure ? 'Inverted Bitmap' : 'True Color Preserved'}
+                  {invertFigure ? 'Inverted' : 'True Color'}
                 </span>
               </div>
 
               {focusSection === 'equation' ? (
                 <div
                   style={{
-                    height: 92,
-                    borderRadius: 6,
+                    height: 112,
+                    borderRadius: 8,
                     backgroundColor: '#eff6ff',
                     border: '1px solid #bfdbfe',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontFamily: FONT_MONO,
-                    fontSize: 16,
-                    fontWeight: 700,
+                    fontSize: 21,
+                    fontWeight: 800,
                     color: '#1e3a8a',
                   }}
                 >
-                  L(θ) = Σᵢ wᵢ · ‖xᵢ − P(aᵢ)‖² + λ‖∇θ‖
+                  L(θ) = Σᵢ wᵢ‖xᵢ − P(aᵢ)‖² + λ‖∇θ‖
                 </div>
               ) : (
                 <div
                   style={{
-                    height: 92,
-                    borderRadius: 6,
+                    height: 118,
+                    borderRadius: 8,
                     backgroundColor: invertFigure ? '#111827' : '#f8fafc',
                     border: invertFigure ? '1px solid #374151' : '1px solid #e2e8f0',
-                    padding: '8px 12px',
+                    padding: '10px 14px',
                     display: 'flex',
                     alignItems: 'flex-end',
-                    gap: 10,
+                    gap: 12,
                   }}
                 >
                   {[
-                    { h: 68, c: invertFigure ? '#06b6d4' : '#ef4444', l: 'Scroll' },
-                    { h: 52, c: invertFigure ? '#a855f7' : '#f59e0b', l: 'Tabs' },
-                    { h: 38, c: invertFigure ? '#f43f5e' : '#3b82f6', l: 'Split' },
-                    { h: 20, c: invertFigure ? '#f472b6' : '#10b981', l: 'Portal' },
+                    { h: 78, c: invertFigure ? '#06b6d4' : '#ef4444', l: 'Scroll' },
+                    { h: 60, c: invertFigure ? '#a855f7' : '#f59e0b', l: 'Tabs' },
+                    { h: 42, c: invertFigure ? '#f43f5e' : '#3b82f6', l: 'Split' },
+                    { h: 24, c: invertFigure ? '#f472b6' : '#10b981', l: 'Portal' },
                   ].map((bar, i) => (
                     <div
                       key={i}
@@ -488,22 +488,22 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        gap: 4,
+                        gap: 5,
                       }}
                     >
                       <div
                         style={{
                           width: '100%',
                           height: bar.h,
-                          borderRadius: 4,
+                          borderRadius: 5,
                           backgroundColor: bar.c,
                         }}
                       />
                       <span
                         style={{
                           fontFamily: FONT_SANS,
-                          fontSize: 10,
-                          fontWeight: 600,
+                          fontSize: 15,
+                          fontWeight: 700,
                           color: invertFigure ? '#cbd5e1' : '#334155',
                         }}
                       >
@@ -517,17 +517,17 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
 
             <p style={{ margin: 0 }}>
               <strong style={{ fontFamily: FONT_SANS, color: pal.heading }}>Theorem 2 (Incremental Sync).</strong>{' '}
-              Wait-free page rasterization updates annotations and SyncTeX highlights without re-decoding streams.{' '}
+              Wait-free page tiles update highlights and SyncTeX spans in place.{' '}
               {autoReloadVersion > 1 && (
-                <span style={{ color: '#059669', fontWeight: 700 }}>
-                  [Updated in compile #{autoReloadVersion}: added Lemma 3 proof bounds.]
+                <span style={{ color: '#059669', fontWeight: 800 }}>
+                  [Updated #{autoReloadVersion}: Lemma 3 added.]
                 </span>
               )}
             </p>
 
             <p style={{ margin: 0 }}>
-              All user highlights, notes, and category tags persist inside standard ISO-32000 PDF dictionaries so
-              external viewers preserve fidelity seamlessly.
+              Annotations persist inside standard ISO-32000 PDF{' '}
+              <span style={{ fontFamily: FONT_MONO }}>/Annots</span> dictionaries.
             </p>
           </div>
         </div>
@@ -542,7 +542,7 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             top: h.topPx,
             left: `${h.leftPercent}%`,
             width: `${h.widthPercent}%`,
-            height: h.kind === 'underline' ? 3 : h.heightPx,
+            height: h.kind === 'underline' ? 4 : h.heightPx,
             marginTop: h.kind === 'underline' ? h.heightPx - 2 : 0,
             backgroundColor:
               h.kind === 'underline'
@@ -550,8 +550,8 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
                 : h.kind === 'strikeout'
                 ? 'transparent'
                 : `${h.color}55`,
-            borderBottom: h.kind === 'strikeout' ? `2.5px solid ${h.color}` : 'none',
-            borderRadius: 3,
+            borderBottom: h.kind === 'strikeout' ? `3.5px solid ${h.color}` : 'none',
+            borderRadius: 4,
             pointerEvents: 'none',
           }}
         >
@@ -559,15 +559,16 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             <span
               style={{
                 position: 'absolute',
-                top: -17,
+                top: -24,
                 right: 0,
                 fontFamily: FONT_MONO,
-                fontSize: 10,
+                fontSize: 15.5,
                 fontWeight: 800,
-                padding: '1px 6px',
-                borderRadius: 4,
+                padding: '2px 8px',
+                borderRadius: 5,
                 backgroundColor: h.color,
                 color: '#0f172a',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
               }}
             >
               {h.label}
@@ -585,9 +586,9 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             top: areaMarquee.y,
             width: `${areaMarquee.w}%`,
             height: areaMarquee.h,
-            border: '2px dashed #f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.14)',
-            borderRadius: 6,
+            border: '3px dashed #f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.16)',
+            borderRadius: 8,
           }}
         />
       )}
@@ -597,14 +598,14 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
         <div
           style={{
             position: 'absolute',
-            left: 14,
-            right: 14,
+            left: 16,
+            right: 16,
             top: readingRulerTopPx,
-            height: 24,
-            backgroundColor: 'rgba(56, 189, 248, 0.16)',
-            borderTop: '1.5px solid rgba(56, 189, 248, 0.75)',
-            borderBottom: '1.5px solid rgba(56, 189, 248, 0.75)',
-            borderRadius: 4,
+            height: 30,
+            backgroundColor: 'rgba(56, 189, 248, 0.18)',
+            borderTop: '2px solid rgba(56, 189, 248, 0.85)',
+            borderBottom: '2px solid rgba(56, 189, 248, 0.85)',
+            borderRadius: 5,
           }}
         />
       )}
@@ -614,13 +615,13 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
         <div
           style={{
             position: 'absolute',
-            left: '52%',
+            left: '51%',
             right: 26,
             top: synctexHighlightTopPx,
-            height: 22,
-            backgroundColor: 'rgba(34, 211, 238, 0.34)',
-            border: '1.5px solid #06b6d4',
-            borderRadius: 4,
+            height: 28,
+            backgroundColor: 'rgba(34, 211, 238, 0.36)',
+            border: '2px solid #06b6d4',
+            borderRadius: 5,
             boxShadow: '0 0 18px rgba(6, 182, 212, 0.45)',
           }}
         />
@@ -634,15 +635,15 @@ export const AcademicPage: React.FC<AcademicPageProps> = ({
             position: 'absolute',
             left: `${hint.xPercent}%`,
             top: `${hint.yPercent}%`,
-            padding: '2px 7px',
-            borderRadius: 5,
+            padding: '4px 11px',
+            borderRadius: 7,
             backgroundColor: hint.active ? '#f97316' : '#facc15',
-            border: '1.5px solid #422006',
+            border: '2px solid #422006',
             color: '#0f172a',
             fontFamily: FONT_MONO,
-            fontSize: 13,
+            fontSize: 22,
             fontWeight: 800,
-            boxShadow: '0 4px 10px rgba(0,0,0,0.35)',
+            boxShadow: '0 6px 14px rgba(0,0,0,0.38)',
             zIndex: 10,
           }}
         >

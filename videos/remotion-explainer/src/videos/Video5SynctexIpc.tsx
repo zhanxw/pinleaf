@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { useCurrentFrame, useVideoConfig } from 'remotion';
 import timingsJson from '../generated/timings.json';
 import type { TimingsManifest } from '../types';
 import { FONT_MONO, FONT_SANS } from '../components/StageFrame';
@@ -17,18 +17,18 @@ const Scene1AutoReload: React.FC = () => {
   const reloaded = frame >= reloadedAt;
 
   return (
-    <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', width: 1520, height: 760 }}>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', width: 1860, height: 850 }}>
       {/* Terminal pane */}
       <div
         style={{
-          width: 470,
+          width: 600,
           borderRadius: 16,
           backgroundColor: '#020617',
-          border: '1px solid rgba(34, 211, 238, 0.38)',
-          padding: 20,
+          border: '1.5px solid rgba(34, 211, 238, 0.45)',
+          padding: 24,
           fontFamily: FONT_MONO,
-          fontSize: 13.5,
-          lineHeight: 1.62,
+          fontSize: 18.5,
+          lineHeight: 1.58,
           color: '#e2e8f0',
           display: 'flex',
           flexDirection: 'column',
@@ -36,20 +36,20 @@ const Scene1AutoReload: React.FC = () => {
         }}
       >
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#22d3ee', marginBottom: 10 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#22d3ee', marginBottom: 12 }}>
             TERMINAL • TeX / Typst Watcher
           </div>
           <div style={{ color: '#94a3b8' }}>$ latexmk -pdf -synctex=1 -pvc paper.tex</div>
-          <div style={{ marginTop: 10 }}>
-            <div>[16:40:02] Writing paper.pdf (12 pages)…</div>
-            <div>[16:40:02] Writing paper.synctex.gz…</div>
+          <div style={{ marginTop: 14 }}>
+            <div>[16:40:02] Writing paper.pdf (12 pp)</div>
+            <div>[16:40:02] Writing paper.synctex.gz</div>
             {reloaded && (
               <>
-                <div style={{ color: '#34d399', marginTop: 8 }}>
-                  [16:40:03] Detected mtime change in 800ms
+                <div style={{ color: '#34d399', marginTop: 12, fontWeight: 700 }}>
+                  [16:40:03] mtime changed (800ms)
                 </div>
-                <div style={{ color: '#67e8f9' }}>
-                  [16:40:03] Reloaded Rev 2.0 • Scroll preserved
+                <div style={{ color: '#67e8f9', fontWeight: 700 }}>
+                  [16:40:03] Reloaded Rev 2.0 • Anchored
                 </div>
               </>
             )}
@@ -57,22 +57,23 @@ const Scene1AutoReload: React.FC = () => {
         </div>
         <div
           style={{
-            padding: 12,
-            borderRadius: 10,
-            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            padding: 14,
+            borderRadius: 11,
+            backgroundColor: 'rgba(15, 23, 42, 0.92)',
             border: '1px solid #334155',
-            fontSize: 12.5,
+            fontFamily: FONT_SANS,
+            fontSize: 18,
             color: '#cbd5e1',
           }}
         >
-          No flicker, no lost scroll position, split panes remain pinned.
+          Zero flicker — scroll anchor, zoom, and split panes remain locked.
         </div>
       </div>
 
       {/* Pinleaf Window */}
       <PinleafWindow
-        widthPx={1030}
-        heightPx={760}
+        widthPx={1242}
+        heightPx={850}
         autoReloadEnabled
         keyPressChip={reloaded ? '⟳ Reloaded Rev 2.0 (800 ms)' : 'Watching paper.pdf on disk…'}
         trailNodes={[
@@ -81,7 +82,7 @@ const Scene1AutoReload: React.FC = () => {
         ]}
         panes={[
           {
-            label: 'Pane #1 • Frozen Anchor',
+            label: 'Pane #1 • Locked',
             frozen: true,
             pageProps: { pageNumber: 1, focusSection: 'intro', autoReloadVersion: reloaded ? 2 : 1 },
           },
@@ -97,7 +98,7 @@ const Scene1AutoReload: React.FC = () => {
         ]}
         statusBanner={
           reloaded
-            ? { text: 'Live Auto-Reload complete: Rev 2.0 (Anchor & zoom preserved)', tone: 'ok' }
+            ? { text: 'Reloaded Rev 2.0 (Anchor preserved)', tone: 'ok' }
             : undefined
         }
       />
@@ -115,18 +116,18 @@ const Scene2TwoWaySyncTex: React.FC = () => {
   const inverseActive = frame >= inverseAt;
 
   return (
-    <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', width: 1520, height: 760 }}>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', width: 1860, height: 850 }}>
       {/* Editor / TeX side */}
       <div
         style={{
-          width: 500,
+          width: 620,
           borderRadius: 16,
           backgroundColor: '#020617',
-          border: '1.5px solid rgba(34, 211, 238, 0.4)',
-          padding: 20,
+          border: '1.5px solid rgba(34, 211, 238, 0.45)',
+          padding: 24,
           fontFamily: FONT_MONO,
-          fontSize: 13.5,
-          lineHeight: 1.65,
+          fontSize: 18,
+          lineHeight: 1.62,
           color: '#cbd5e1',
           display: 'flex',
           flexDirection: 'column',
@@ -134,15 +135,15 @@ const Scene2TwoWaySyncTex: React.FC = () => {
         }}
       >
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#22d3ee', marginBottom: 10 }}>
-            EDITOR • main.tex (.synctex.gz paired)
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#22d3ee', marginBottom: 12 }}>
+            EDITOR • main.tex (.synctex.gz)
           </div>
           {[
-            '39  \\section{Incremental Proofs}',
+            '39  \\section{Incremental}',
             '40  ',
-            '41  \\begin{theorem}[Incremental Sync]',
-            '42    Wait-free rasterization updates',
-            '43    SyncTeX bounds in O(1) lookup.',
+            '41  \\begin{theorem}[Sync]',
+            '42    Wait-free page tiles',
+            '43    update SyncTeX bounds.',
             '44  \\end{theorem}',
           ].map((line, i) => {
             const isLine42 = line.startsWith('42');
@@ -151,15 +152,16 @@ const Scene2TwoWaySyncTex: React.FC = () => {
               <div
                 key={i}
                 style={{
-                  padding: '2px 8px',
-                  borderRadius: 6,
+                  padding: '3px 10px',
+                  borderRadius: 7,
                   backgroundColor: lit
                     ? inverseActive
-                      ? 'rgba(52, 211, 153, 0.25)'
-                      : 'rgba(34, 211, 238, 0.2)'
+                      ? 'rgba(52, 211, 153, 0.28)'
+                      : 'rgba(34, 211, 238, 0.22)'
                     : 'transparent',
-                  borderLeft: lit ? '3px solid #22d3ee' : '3px solid transparent',
+                  borderLeft: lit ? '4px solid #22d3ee' : '4px solid transparent',
                   color: lit ? '#f8fafc' : '#94a3b8',
+                  fontWeight: lit ? 700 : 500,
                 }}
               >
                 {line}
@@ -169,36 +171,36 @@ const Scene2TwoWaySyncTex: React.FC = () => {
 
           <div
             style={{
-              marginTop: 18,
-              padding: 12,
-              borderRadius: 10,
-              backgroundColor: 'rgba(15, 23, 42, 0.92)',
-              border: '1px solid #334155',
-              fontSize: 12,
+              marginTop: 20,
+              padding: 14,
+              borderRadius: 11,
+              backgroundColor: 'rgba(15, 23, 42, 0.94)',
+              border: '1.5px solid #334155',
+              fontSize: 16.5,
               color: '#67e8f9',
             }}
           >
             <div>$ pinleaf --synctex-forward 42:1:main.tex paper.pdf</div>
             {inverseActive && (
-              <div style={{ color: '#34d399', marginTop: 6 }}>
+              <div style={{ color: '#34d399', marginTop: 8, fontWeight: 700 }}>
                 ⇧⌘J / ⌘+Click → code -g main.tex:42:5
               </div>
             )}
           </div>
         </div>
 
-        <div style={{ fontFamily: FONT_SANS, fontSize: 13, color: '#94a3b8' }}>
+        <div style={{ fontFamily: FONT_SANS, fontSize: 18, color: '#cbd5e1' }}>
           Zero C FFI: pure-Rust SyncTeX v1 parser decodes gzipped node records directly.
         </div>
       </div>
 
       {/* Pinleaf side */}
       <PinleafWindow
-        widthPx={1000}
-        heightPx={760}
+        widthPx={1222}
+        heightPx={850}
         keyPressChip={
           inverseActive
-            ? '⌘+Click / ⇧⌘J  →  Inverse Jump main.tex:42'
+            ? '⌘+Click / ⇧⌘J  →  main.tex:42'
             : forwardActive
             ? 'Forward Search  →  Line 42 Highlighted'
             : 'Ready for SyncTeX Lookup'
@@ -210,13 +212,13 @@ const Scene2TwoWaySyncTex: React.FC = () => {
             pageProps: {
               pageNumber: 3,
               focusSection: 'theorem',
-              synctexHighlightTopPx: forwardActive ? 290 : null,
+              synctexHighlightTopPx: forwardActive ? 316 : null,
             },
           },
         ]}
         statusBanner={
           inverseActive
-            ? { text: 'SyncTeX Inverse -> main.tex:42 (editor opened cleanly)', tone: 'ok' }
+            ? { text: 'SyncTeX Inverse -> main.tex:42 (editor opened)', tone: 'ok' }
             : undefined
         }
       />
@@ -237,13 +239,14 @@ const Scene3CliIpc: React.FC = () => {
       {/* CLI Banner */}
       <div
         style={{
-          width: 1520,
+          width: 1860,
           borderRadius: 14,
           backgroundColor: '#020617',
-          border: '1px solid rgba(34, 211, 238, 0.45)',
-          padding: '12px 20px',
+          border: '1.5px solid rgba(34, 211, 238, 0.5)',
+          padding: '13px 22px',
           fontFamily: FONT_MONO,
-          fontSize: 14,
+          fontSize: 20,
+          fontWeight: 700,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -251,7 +254,7 @@ const Scene3CliIpc: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', gap: 16 }}>
-          <span style={{ color: '#22d3ee', fontWeight: 700 }}>$</span>
+          <span style={{ color: '#22d3ee', fontWeight: 800 }}>$</span>
           <span>
             {step === 1
               ? 'pinleaf --execute-command goto_page 3'
@@ -260,16 +263,16 @@ const Scene3CliIpc: React.FC = () => {
               : 'pinleaf --execute-command cycle_color_mode'}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 12, fontSize: 12.5 }}>
+        <div style={{ display: 'flex', gap: 16, fontSize: 18 }}>
           <span style={{ color: '#34d399' }}>→ queued (exit 0)</span>
-          <span style={{ color: '#64748b' }}>Socket: $TMPDIR/pinleaf-$USER.sock (0600)</span>
+          <span style={{ color: '#94a3b8' }}>$TMPDIR/pinleaf-$USER.sock (0600)</span>
         </div>
       </div>
 
       <PinleafWindow
-        heightPx={675}
+        heightPx={772}
         theme={step === 3 ? 'sepia' : 'light'}
-        keyPressChip={`IPC Step ${step}/3 Executed Live`}
+        keyPressChip={`IPC Command ${step}/3 Executed Live`}
         panes={
           step >= 2
             ? [
@@ -319,7 +322,7 @@ const Scene4ShellExtensions: React.FC = () => {
         rows: [
           {
             title: 'Copy Formatted Citation & Quote',
-            meta: `printf '%s (p.%s)' {selected_text} {page} | pbcopy   •   PINLEAF_DOI=10.1145/3597503.3623310`,
+            meta: `printf '%s (p.%s)' {selected_text} {page} | pbcopy  •  PINLEAF_DOI=10.1145/3597503.3623310`,
             badge: 'Ctrl+Y',
             selected: true,
           },
@@ -338,7 +341,7 @@ const Scene4ShellExtensions: React.FC = () => {
       statusBanner={
         ran
           ? {
-              text: 'Shell-safe single-quoting prevents injection • Copied formatted quote + DOI to clipboard',
+              text: 'Shell-safe single-quoting • Copied formatted quote + DOI',
               tone: 'ok',
             }
           : undefined

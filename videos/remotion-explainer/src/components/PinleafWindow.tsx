@@ -94,8 +94,8 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
   keyPressChip,
   statusBanner,
   cursor,
-  widthPx = 1520,
-  heightPx = 790,
+  widthPx = 1860,
+  heightPx = 852,
 }) => {
   const pal = getThemePalette(theme);
   const darkChrome = theme === 'dark' || theme === 'custom';
@@ -109,8 +109,8 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           height: heightPx,
           backgroundColor: '#05070c',
           borderRadius: 16,
-          padding: 26,
-          border: '1px solid rgba(148, 163, 184, 0.2)',
+          padding: 24,
+          border: '1px solid rgba(148, 163, 184, 0.25)',
           boxShadow: '0 30px 90px rgba(0, 0, 0, 0.7)',
           display: 'flex',
           alignItems: 'center',
@@ -118,7 +118,7 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           overflow: 'hidden',
         }}
       >
-        <div style={{ width: '92%', height: '94%' }}>
+        <div style={{ width: '94%', height: '94%' }}>
           <AcademicPage {...panes[0].pageProps} focusSection="slide" />
         </div>
         <div
@@ -126,13 +126,13 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
             position: 'absolute',
             top: 16,
             right: 22,
-            padding: '6px 14px',
+            padding: '7px 16px',
             borderRadius: 999,
-            backgroundColor: 'rgba(15, 23, 42, 0.86)',
-            border: '1px solid rgba(192, 132, 252, 0.55)',
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            border: '1.5px solid rgba(192, 132, 252, 0.65)',
             fontFamily: FONT_MONO,
-            fontSize: 13,
-            fontWeight: 700,
+            fontSize: 18,
+            fontWeight: 800,
             color: '#e9d5ff',
           }}
         >
@@ -152,8 +152,8 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
         overflow: 'hidden',
         backgroundColor: pal.canvasBg,
         border: darkChrome
-          ? '1px solid rgba(148, 163, 184, 0.25)'
-          : '1px solid rgba(255, 255, 255, 0.3)',
+          ? '1px solid rgba(148, 163, 184, 0.28)'
+          : '1px solid rgba(255, 255, 255, 0.35)',
         boxShadow: '0 28px 85px rgba(0, 0, 0, 0.55)',
         display: 'flex',
         flexDirection: 'column',
@@ -163,57 +163,57 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
       {/* macOS Titlebar */}
       <div
         style={{
-          height: 38,
+          height: 40,
           backgroundColor: darkChrome ? '#1e293b' : '#f1f5f9',
           borderBottom: `1px solid ${pal.border}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 16px',
+          padding: '0 18px',
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 12, height: 12, borderRadius: 99, backgroundColor: '#ef4444' }} />
-          <div style={{ width: 12, height: 12, borderRadius: 99, backgroundColor: '#f59e0b' }} />
-          <div style={{ width: 12, height: 12, borderRadius: 99, backgroundColor: '#22c55e' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <div style={{ width: 13, height: 13, borderRadius: 99, backgroundColor: '#ef4444' }} />
+          <div style={{ width: 13, height: 13, borderRadius: 99, backgroundColor: '#f59e0b' }} />
+          <div style={{ width: 13, height: 13, borderRadius: 99, backgroundColor: '#22c55e' }} />
         </div>
         <div
           style={{
-            fontSize: 13,
-            fontWeight: 600,
+            fontSize: 18,
+            fontWeight: 700,
             color: darkChrome ? '#e2e8f0' : '#334155',
           }}
         >
           {title}
         </div>
-        <div style={{ width: 54 }} />
+        <div style={{ width: 56 }} />
       </div>
 
       {/* Pinleaf Toolbar */}
       <div
         style={{
-          height: 44,
+          height: 50,
           backgroundColor: darkChrome ? '#111827' : '#ffffff',
           borderBottom: `1px solid ${pal.border}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 14px',
-          fontSize: 12.5,
-          fontWeight: 600,
+          padding: '0 16px',
+          fontSize: 17,
+          fontWeight: 700,
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {['Sidebar', 'Search', 'TOC', 'Split ⌘D'].map((btn) => (
             <div
               key={btn}
               style={{
-                padding: '5px 10px',
-                borderRadius: 7,
+                padding: '6px 12px',
+                borderRadius: 8,
                 backgroundColor: darkChrome ? '#1f2937' : '#f1f5f9',
-                color: darkChrome ? '#e2e8f0' : '#334155',
+                color: darkChrome ? '#e2e8f0' : '#1e293b',
                 border: `1px solid ${pal.border}`,
               }}
             >
@@ -225,10 +225,10 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                marginLeft: 6,
-                padding: '3px 8px',
-                borderRadius: 8,
+                gap: 7,
+                marginLeft: 8,
+                padding: '4px 10px',
+                borderRadius: 9,
                 backgroundColor: darkChrome ? '#0f172a' : '#f8fafc',
                 border: `1px solid ${pal.border}`,
               }}
@@ -238,21 +238,21 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                   {idx > 0 && <span style={{ color: '#64748b' }}>→</span>}
                   <span
                     style={{
-                      padding: '2px 8px',
-                      borderRadius: 6,
+                      padding: '3px 10px',
+                      borderRadius: 7,
                       fontFamily: FONT_MONO,
-                      fontSize: 11.5,
-                      fontWeight: 700,
+                      fontSize: 16,
+                      fontWeight: 800,
                       backgroundColor: n.frozen
-                        ? 'rgba(245, 158, 11, 0.18)'
+                        ? 'rgba(245, 158, 11, 0.2)'
                         : n.active
-                        ? 'rgba(16, 185, 129, 0.2)'
-                        : 'rgba(148, 163, 184, 0.15)',
+                        ? 'rgba(16, 185, 129, 0.22)'
+                        : 'rgba(148, 163, 184, 0.16)',
                       color: n.frozen ? '#d97706' : n.active ? '#059669' : '#64748b',
                       border: n.frozen
-                        ? '1px solid rgba(245, 158, 11, 0.45)'
+                        ? '1.5px solid rgba(245, 158, 11, 0.5)'
                         : n.active
-                        ? '1px solid rgba(16, 185, 129, 0.45)'
+                        ? '1.5px solid rgba(16, 185, 129, 0.5)'
                         : '1px solid transparent',
                     }}
                   >
@@ -264,17 +264,17 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {autoReloadEnabled && (
             <div
               style={{
-                padding: '4px 10px',
-                borderRadius: 7,
-                backgroundColor: 'rgba(34, 211, 238, 0.16)',
-                border: '1px solid rgba(34, 211, 238, 0.45)',
+                padding: '5px 12px',
+                borderRadius: 8,
+                backgroundColor: 'rgba(34, 211, 238, 0.18)',
+                border: '1.5px solid rgba(34, 211, 238, 0.55)',
                 color: darkChrome ? '#67e8f9' : '#0e7490',
                 fontFamily: FONT_MONO,
-                fontSize: 11.5,
+                fontSize: 16,
               }}
             >
               ⟳ Auto-Reload ON
@@ -282,10 +282,10 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           )}
           <div
             style={{
-              padding: '4px 10px',
-              borderRadius: 7,
+              padding: '5px 12px',
+              borderRadius: 8,
               backgroundColor: darkChrome ? '#1f2937' : '#f1f5f9',
-              color: darkChrome ? '#e2e8f0' : '#334155',
+              color: darkChrome ? '#e2e8f0' : '#1e293b',
               fontFamily: FONT_MONO,
             }}
           >
@@ -293,10 +293,10 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           </div>
           <div
             style={{
-              padding: '4px 10px',
-              borderRadius: 7,
+              padding: '5px 12px',
+              borderRadius: 8,
               backgroundColor: darkChrome ? '#1f2937' : '#f1f5f9',
-              color: darkChrome ? '#e2e8f0' : '#334155',
+              color: darkChrome ? '#e2e8f0' : '#1e293b',
               fontFamily: FONT_MONO,
             }}
           >
@@ -304,11 +304,11 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           </div>
           <div
             style={{
-              padding: '5px 11px',
-              borderRadius: 7,
+              padding: '6px 14px',
+              borderRadius: 8,
               backgroundColor: '#10b981',
               color: '#064e3b',
-              fontWeight: 700,
+              fontWeight: 800,
             }}
           >
             Save ⌘S
@@ -316,39 +316,39 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
         </div>
       </div>
 
-      {/* Main Content Body (Optional Sidebar + Split Panes) */}
+      {/* Main Content Body */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         {sidebar && (
           <div
             style={{
-              width: 340,
+              width: 460,
               backgroundColor: darkChrome ? '#0f172a' : '#f8fafc',
               borderRight: `1px solid ${pal.border}`,
-              padding: 14,
+              padding: 16,
               display: 'flex',
               flexDirection: 'column',
-              gap: 10,
+              gap: 11,
               flexShrink: 0,
             }}
           >
             <div
               style={{
-                fontSize: 13,
-                fontWeight: 700,
+                fontSize: 19,
+                fontWeight: 800,
                 color: pal.heading,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
               }}
             >
-              <span>Notes & Annotations (⇧⌘A)</span>
-              <span style={{ fontSize: 11, color: pal.textMuted }}>
+              <span>Notes &amp; Categories (⇧⌘A)</span>
+              <span style={{ fontSize: 15.5, color: pal.textMuted }}>
                 {sidebar.items.length} shown
               </span>
             </div>
 
             {sidebar.filterChips && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                 {sidebar.filterChips.map((chip) => {
                   const selected =
                     (chip.cat === 'all' && sidebar.activeFilter === null) ||
@@ -357,13 +357,13 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                     <div
                       key={chip.cat}
                       style={{
-                        padding: '3px 8px',
+                        padding: '4px 10px',
                         borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        backgroundColor: selected ? chip.color : 'rgba(148,163,184,0.16)',
+                        fontSize: 15.5,
+                        fontWeight: 800,
+                        backgroundColor: selected ? chip.color : 'rgba(148,163,184,0.18)',
                         color: selected ? '#0f172a' : pal.textPrimary,
-                        border: `1px solid ${selected ? chip.color : pal.border}`,
+                        border: `1.5px solid ${selected ? chip.color : pal.border}`,
                       }}
                     >
                       {chip.label} ({chip.count})
@@ -373,31 +373,31 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {sidebar.items.map((item, idx) => (
                 <div
                   key={idx}
                   style={{
-                    padding: 10,
-                    borderRadius: 9,
+                    padding: 12,
+                    borderRadius: 10,
                     backgroundColor: darkChrome ? '#1e293b' : '#ffffff',
                     border: `1px solid ${pal.border}`,
-                    borderLeft: `4px solid ${item.color}`,
+                    borderLeft: `5px solid ${item.color}`,
                   }}
                 >
                   <div
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      marginBottom: 4,
-                      fontSize: 11,
-                      fontWeight: 700,
+                      marginBottom: 5,
+                      fontSize: 15.5,
+                      fontWeight: 800,
                     }}
                   >
                     <span
                       style={{
-                        padding: '1px 6px',
-                        borderRadius: 4,
+                        padding: '2px 8px',
+                        borderRadius: 5,
                         backgroundColor: `${item.color}33`,
                         color: darkChrome ? '#f8fafc' : '#0f172a',
                       }}
@@ -406,14 +406,14 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                     </span>
                     <span style={{ color: pal.textMuted }}>p. {item.page}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: pal.textPrimary, lineHeight: 1.38 }}>
+                  <div style={{ fontSize: 17, color: pal.textPrimary, lineHeight: 1.35 }}>
                     “{item.quote}”
                   </div>
                   {item.note && (
                     <div
                       style={{
                         marginTop: 5,
-                        fontSize: 11.5,
+                        fontSize: 15.5,
                         color: pal.textMuted,
                         fontStyle: 'italic',
                       }}
@@ -433,7 +433,7 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
             flex: 1,
             display: 'flex',
             flexDirection: splitAxis === 'vertical' ? 'column' : 'row',
-            gap: 10,
+            gap: 12,
             padding: 12,
             overflow: 'hidden',
           }}
@@ -445,13 +445,13 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                borderRadius: 10,
+                borderRadius: 11,
                 border: pane.active
-                  ? '2px solid #10b981'
+                  ? '2.5px solid #10b981'
                   : pane.frozen
-                  ? '2px solid #f59e0b'
+                  ? '2.5px solid #f59e0b'
                   : pane.portalFollower
-                  ? '2px solid #38bdf8'
+                  ? '2.5px solid #38bdf8'
                   : `1px solid ${pal.border}`,
                 backgroundColor: pal.canvasBg,
                 overflow: 'hidden',
@@ -460,26 +460,27 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               {/* Pane mini-header */}
               <div
                 style={{
-                  height: 30,
+                  height: 38,
                   backgroundColor: darkChrome ? '#0f172a' : '#e2e8f0',
-                  padding: '0 10px',
+                  padding: '0 12px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  fontSize: 11.5,
-                  fontWeight: 700,
+                  fontSize: 16.5,
+                  fontWeight: 800,
                   flexShrink: 0,
                 }}
               >
                 <span style={{ color: pal.heading }}>{pane.label}</span>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
                   {pane.frozen && (
                     <span
                       style={{
-                        padding: '1px 7px',
+                        padding: '2px 9px',
                         borderRadius: 999,
-                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        backgroundColor: 'rgba(245, 158, 11, 0.24)',
                         color: '#b45309',
+                        fontSize: 15,
                       }}
                     >
                       🔒 FROZEN
@@ -488,10 +489,11 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                   {pane.portalFollower && (
                     <span
                       style={{
-                        padding: '1px 7px',
+                        padding: '2px 10px',
                         borderRadius: 999,
-                        backgroundColor: 'rgba(56, 189, 248, 0.22)',
+                        backgroundColor: 'rgba(56, 189, 248, 0.25)',
                         color: darkChrome ? '#7dd3fc' : '#0369a1',
+                        fontSize: 15.5,
                       }}
                     >
                       ⇄ Portal Follower{pane.activePortalTarget ? ` • ${pane.activePortalTarget}` : ''}
@@ -500,10 +502,11 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                   {pane.active && !pane.frozen && !pane.portalFollower && (
                     <span
                       style={{
-                        padding: '1px 7px',
+                        padding: '2px 9px',
                         borderRadius: 999,
-                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.24)',
                         color: '#047857',
+                        fontSize: 15,
                       }}
                     >
                       ACTIVE
@@ -526,22 +529,23 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               position: 'absolute',
               top: 16,
               right: 22,
-              padding: '8px 14px',
-              borderRadius: 10,
-              backgroundColor: 'rgba(15, 23, 42, 0.94)',
-              border: '1px solid #60a5fa',
+              padding: '10px 18px',
+              borderRadius: 11,
+              backgroundColor: 'rgba(15, 23, 42, 0.96)',
+              border: '2px solid #60a5fa',
               color: '#f8fafc',
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
+              gap: 14,
               fontFamily: FONT_MONO,
-              fontSize: 13,
-              boxShadow: '0 12px 28px rgba(0,0,0,0.4)',
+              fontSize: 19.5,
+              fontWeight: 700,
+              boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
             }}
           >
-            <span style={{ color: '#93c5fd', fontWeight: 700 }}>⌘F</span>
+            <span style={{ color: '#93c5fd', fontWeight: 800 }}>⌘F</span>
             <span>{searchBar.query}</span>
-            <span style={{ color: '#34d399', fontSize: 12 }}>{searchBar.matchLabel}</span>
+            <span style={{ color: '#34d399', fontSize: 17 }}>{searchBar.matchLabel}</span>
           </div>
         )}
 
@@ -550,15 +554,15 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           <div
             style={{
               position: 'absolute',
-              top: 30,
+              top: 26,
               left: '50%',
               transform: 'translateX(-50%)',
-              width: 720,
-              borderRadius: 14,
-              backgroundColor: 'rgba(15, 23, 42, 0.96)',
-              border: '1.5px solid rgba(96, 165, 250, 0.65)',
-              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.6)',
-              padding: 16,
+              width: 1020,
+              borderRadius: 16,
+              backgroundColor: 'rgba(15, 23, 42, 0.97)',
+              border: '2px solid rgba(96, 165, 250, 0.72)',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65)',
+              padding: 20,
               color: '#f8fafc',
             }}
           >
@@ -567,23 +571,24 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '9px 14px',
-                borderRadius: 9,
+                padding: '11px 16px',
+                borderRadius: 10,
                 backgroundColor: '#020617',
-                border: '1px solid #334155',
-                marginBottom: 12,
+                border: '1.5px solid #334155',
+                marginBottom: 14,
                 fontFamily: FONT_MONO,
-                fontSize: 15,
+                fontSize: 23,
+                fontWeight: 700,
               }}
             >
               <span>
-                <span style={{ color: '#60a5fa', fontWeight: 700 }}>/ </span>
+                <span style={{ color: '#60a5fa', fontWeight: 800 }}>/ </span>
                 {commandPalette.query}
                 <span style={{ color: '#60a5fa' }}>|</span>
               </span>
-              <span style={{ fontSize: 12, color: '#64748b' }}>Esc to close</span>
+              <span style={{ fontSize: 16, color: '#94a3b8' }}>Esc to close</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {commandPalette.items.map((item, i) => {
                 const selected = i === commandPalette.selectedIdx;
                 return (
@@ -593,32 +598,33 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      backgroundColor: selected ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
-                      border: selected ? '1px solid rgba(96, 165, 250, 0.5)' : '1px solid transparent',
+                      padding: '11px 14px',
+                      borderRadius: 9,
+                      backgroundColor: selected ? 'rgba(59, 130, 246, 0.28)' : 'transparent',
+                      border: selected ? '1.5px solid rgba(96, 165, 250, 0.6)' : '1px solid transparent',
                     }}
                   >
                     <div>
                       <span
                         style={{
-                          fontSize: 11,
-                          fontWeight: 700,
+                          fontSize: 14.5,
+                          fontWeight: 800,
                           color: '#93c5fd',
-                          marginRight: 10,
+                          marginRight: 12,
                           textTransform: 'uppercase',
                         }}
                       >
                         {item.category}
                       </span>
-                      <span style={{ fontSize: 14.5, fontWeight: 600 }}>{item.title}</span>
+                      <span style={{ fontSize: 21, fontWeight: 700 }}>{item.title}</span>
                     </div>
                     <span
                       style={{
                         fontFamily: FONT_MONO,
-                        fontSize: 12.5,
-                        padding: '2px 9px',
-                        borderRadius: 6,
+                        fontSize: 19,
+                        fontWeight: 800,
+                        padding: '4px 12px',
+                        borderRadius: 7,
                         backgroundColor: '#1e293b',
                         color: '#fbbf24',
                       }}
@@ -637,48 +643,50 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           <div
             style={{
               position: 'absolute',
-              top: 26,
-              left: 44,
-              width: 470,
-              borderRadius: 14,
-              backgroundColor: 'rgba(15, 23, 42, 0.96)',
-              border: '1.5px solid rgba(52, 211, 153, 0.6)',
-              boxShadow: '0 22px 54px rgba(0,0,0,0.55)',
-              padding: 14,
+              top: 24,
+              left: 36,
+              width: 640,
+              borderRadius: 15,
+              backgroundColor: 'rgba(15, 23, 42, 0.97)',
+              border: '2px solid rgba(52, 211, 153, 0.65)',
+              boxShadow: '0 22px 54px rgba(0,0,0,0.6)',
+              padding: 18,
               color: '#f8fafc',
             }}
           >
             <div
               style={{
                 fontFamily: FONT_MONO,
-                fontSize: 13,
-                padding: '7px 10px',
-                borderRadius: 8,
+                fontSize: 19,
+                fontWeight: 700,
+                padding: '9px 14px',
+                borderRadius: 9,
                 backgroundColor: '#020617',
                 border: '1px solid #334155',
-                marginBottom: 10,
+                marginBottom: 12,
               }}
             >
               TOC Filter: <span style={{ color: '#34d399' }}>{tocOverlay.query || 'all sections'}</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {tocOverlay.items.map((row, idx) => (
                 <div
                   key={idx}
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    padding: '6px 10px',
-                    paddingLeft: 10 + row.level * 14,
-                    borderRadius: 7,
-                    backgroundColor: row.selected ? 'rgba(16, 185, 129, 0.24)' : 'transparent',
-                    fontSize: 13,
+                    padding: '8px 12px',
+                    paddingLeft: 12 + row.level * 18,
+                    borderRadius: 8,
+                    backgroundColor: row.selected ? 'rgba(16, 185, 129, 0.26)' : 'transparent',
+                    fontSize: 19,
+                    fontWeight: 600,
                   }}
                 >
                   <span>
                     {row.title}{' '}
                     {row.inferred && (
-                      <span style={{ fontSize: 10, color: '#94a3b8' }}>(Auto-TOC)</span>
+                      <span style={{ fontSize: 14.5, color: '#94a3b8' }}>(Auto-TOC)</span>
                     )}
                   </span>
                   <span style={{ fontFamily: FONT_MONO, color: '#94a3b8' }}>p.{row.page}</span>
@@ -693,15 +701,15 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           <div
             style={{
               position: 'absolute',
-              top: 34,
+              top: 32,
               left: '50%',
               transform: 'translateX(-50%)',
-              width: 760,
-              borderRadius: 14,
+              width: 1120,
+              borderRadius: 16,
               backgroundColor: 'rgba(15, 23, 42, 0.97)',
-              border: '1.5px solid rgba(251, 191, 36, 0.65)',
+              border: '2px solid rgba(251, 191, 36, 0.72)',
               boxShadow: '0 26px 68px rgba(0,0,0,0.65)',
-              padding: 16,
+              padding: 20,
               color: '#f8fafc',
             }}
           >
@@ -710,19 +718,20 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: 10,
+                marginBottom: 14,
               }}
             >
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#fde68a' }}>
+              <span style={{ fontSize: 23, fontWeight: 800, color: '#fde68a' }}>
                 {libraryModal.heading}
               </span>
               {libraryModal.query !== undefined && (
                 <span
                   style={{
                     fontFamily: FONT_MONO,
-                    fontSize: 13,
-                    padding: '4px 10px',
-                    borderRadius: 7,
+                    fontSize: 19,
+                    fontWeight: 700,
+                    padding: '5px 12px',
+                    borderRadius: 8,
                     backgroundColor: '#020617',
                     border: '1px solid #334155',
                   }}
@@ -731,7 +740,7 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 </span>
               )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {libraryModal.rows.map((r, i) => (
                 <div
                   key={i}
@@ -739,28 +748,30 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '9px 12px',
-                    borderRadius: 9,
-                    backgroundColor: r.selected ? 'rgba(251, 191, 36, 0.18)' : 'rgba(30, 41, 59, 0.65)',
+                    gap: 16,
+                    padding: '12px 15px',
+                    borderRadius: 10,
+                    backgroundColor: r.selected ? 'rgba(251, 191, 36, 0.2)' : 'rgba(30, 41, 59, 0.72)',
                     border: r.selected
-                      ? '1px solid rgba(251, 191, 36, 0.6)'
-                      : '1px solid rgba(148,163,184,0.16)',
+                      ? '1.5px solid rgba(251, 191, 36, 0.7)'
+                      : '1px solid rgba(148,163,184,0.2)',
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{r.title}</div>
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{r.meta}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700 }}>{r.title}</div>
+                    <div style={{ fontSize: 17, color: '#cbd5e1', marginTop: 3 }}>{r.meta}</div>
                   </div>
                   {r.badge && (
                     <span
                       style={{
                         fontFamily: FONT_MONO,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        padding: '3px 9px',
-                        borderRadius: 6,
+                        fontSize: 18,
+                        fontWeight: 800,
+                        padding: '4px 12px',
+                        borderRadius: 7,
                         backgroundColor: '#1e293b',
                         color: '#fbbf24',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {r.badge}
@@ -779,13 +790,13 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               position: 'absolute',
               left: `${overviewCard.xPercent}%`,
               top: `${overviewCard.yPercent}%`,
-              width: 390,
+              width: 560,
               transform: `scale(${overviewCard.scale ?? 1})`,
-              borderRadius: 12,
-              backgroundColor: 'rgba(15, 23, 42, 0.96)',
-              border: '1.5px solid #60a5fa',
-              boxShadow: '0 22px 54px rgba(0,0,0,0.58)',
-              padding: 14,
+              borderRadius: 14,
+              backgroundColor: 'rgba(15, 23, 42, 0.97)',
+              border: '2px solid #60a5fa',
+              boxShadow: '0 22px 54px rgba(0,0,0,0.62)',
+              padding: 18,
               color: '#f8fafc',
               zIndex: 15,
             }}
@@ -795,18 +806,19 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: 8,
+                marginBottom: 10,
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#93c5fd' }}>
-                Overview Preview • {overviewCard.title}
+              <span style={{ fontSize: 19, fontWeight: 800, color: '#93c5fd' }}>
+                Overview • {overviewCard.title}
               </span>
               <span
                 style={{
                   fontFamily: FONT_MONO,
-                  fontSize: 11,
-                  padding: '2px 7px',
-                  borderRadius: 5,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  padding: '3px 9px',
+                  borderRadius: 6,
                   backgroundColor: '#1e293b',
                 }}
               >
@@ -815,11 +827,11 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
             </div>
             <div
               style={{
-                fontSize: 12.5,
-                lineHeight: 1.48,
-                color: '#e2e8f0',
-                padding: 10,
-                borderRadius: 8,
+                fontSize: 18.5,
+                lineHeight: 1.45,
+                color: '#f1f5f9',
+                padding: 12,
+                borderRadius: 9,
                 backgroundColor: '#020617',
                 border: '1px solid #334155',
               }}
@@ -835,14 +847,14 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
             style={{
               position: 'absolute',
               bottom: 16,
-              left: sidebar ? 358 : 18,
-              padding: '7px 14px',
-              borderRadius: 10,
-              backgroundColor: 'rgba(2, 6, 23, 0.92)',
-              border: '1.5px solid #34d399',
+              left: sidebar ? 478 : 18,
+              padding: '9px 16px',
+              borderRadius: 11,
+              backgroundColor: 'rgba(2, 6, 23, 0.94)',
+              border: '2px solid #34d399',
               fontFamily: FONT_MONO,
-              fontSize: 13.5,
-              fontWeight: 700,
+              fontSize: 20,
+              fontWeight: 800,
               color: '#34d399',
               boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
               zIndex: 20,
@@ -858,21 +870,21 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               position: 'absolute',
               bottom: 16,
               right: 18,
-              padding: '8px 14px',
-              borderRadius: 10,
+              padding: '9px 16px',
+              borderRadius: 11,
               backgroundColor:
                 statusBanner.tone === 'ok'
-                  ? 'rgba(6, 78, 59, 0.94)'
-                  : 'rgba(15, 23, 42, 0.94)',
+                  ? 'rgba(6, 78, 59, 0.96)'
+                  : 'rgba(15, 23, 42, 0.96)',
               border:
                 statusBanner.tone === 'ok'
-                  ? '1px solid #34d399'
-                  : '1px solid rgba(148,163,184,0.45)',
+                  ? '2px solid #34d399'
+                  : '2px solid rgba(148,163,184,0.5)',
               color: '#f8fafc',
               fontFamily: FONT_MONO,
-              fontSize: 12.5,
-              fontWeight: 600,
-              boxShadow: '0 8px 26px rgba(0,0,0,0.4)',
+              fontSize: 18.5,
+              fontWeight: 700,
+              boxShadow: '0 8px 26px rgba(0,0,0,0.45)',
               zIndex: 20,
             }}
           >
@@ -895,17 +907,17 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               <div
                 style={{
                   position: 'absolute',
-                  left: -12,
-                  top: -12,
-                  width: 30,
-                  height: 30,
+                  left: -14,
+                  top: -14,
+                  width: 36,
+                  height: 36,
                   borderRadius: 99,
-                  border: '2.5px solid #38bdf8',
-                  backgroundColor: 'rgba(56, 189, 248, 0.25)',
+                  border: '3px solid #38bdf8',
+                  backgroundColor: 'rgba(56, 189, 248, 0.28)',
                 }}
               />
             )}
-            <svg width="24" height="24" viewBox="0 0 24 24">
+            <svg width="30" height="30" viewBox="0 0 24 24">
               <path
                 d="M4 2 L19 13 L12 14 L15 21 L12 22 L9 15 L4 19 Z"
                 fill="#ffffff"

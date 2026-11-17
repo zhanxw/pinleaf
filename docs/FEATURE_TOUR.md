@@ -6,7 +6,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 01 — Multi-View Freeze-and-Branch & Scroll-Linked Portals
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/01-freeze-and-portals.mp4) · [Local Repo File](videos/01-freeze-and-portals.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/01-freeze-and-portals.mp4) · [Local Repo File](videos/01-freeze-and-portals.mp4)
 
 ![Multi-View Freeze-and-Branch & Scroll Portals](videos/01-freeze-and-portals.png)
 
@@ -19,7 +19,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 02 — Smart Jump, Keyboard Hints & Rapid Navigation
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/02-navigation-smart-jump-hints.mp4) · [Local Repo File](videos/02-navigation-smart-jump-hints.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/02-navigation-smart-jump-hints.mp4) · [Local Repo File](videos/02-navigation-smart-jump-hints.mp4)
 
 ![Smart Jump & Vimium 2-Letter Hints](videos/02-navigation-smart-jump-hints.png)
 
@@ -32,7 +32,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 03 — ISO-32000 PDF Annotations, 26 Categories & Library
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/03-annotations-categories-library.mp4) · [Local Repo File](videos/03-annotations-categories-library.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/03-annotations-categories-library.mp4) · [Local Repo File](videos/03-annotations-categories-library.mp4)
 
 ![26 Typed Highlight Categories & Sidebar Filters](videos/03-annotations-categories-library.png)
 
@@ -45,7 +45,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 04 — Smart Dark Mode, Comfort & Presentation Mode
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/04-themes-comfort-presentation.mp4) · [Local Repo File](videos/04-themes-comfort-presentation.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/04-themes-comfort-presentation.mp4) · [Local Repo File](videos/04-themes-comfort-presentation.mp4)
 
 ![Smart Dark Mode Figure Preservation](videos/04-themes-comfort-presentation.png)
 
@@ -58,7 +58,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 05 — LaTeX/Typst Live Workflow: SyncTeX, CLI IPC & Extensions
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/05-synctex-ipc-extensions.mp4) · [Local Repo File](videos/05-synctex-ipc-extensions.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/05-synctex-ipc-extensions.mp4) · [Local Repo File](videos/05-synctex-ipc-extensions.mp4)
 
 ![Two-Way SyncTeX & Editor Integration](videos/05-synctex-ipc-extensions.png)
 

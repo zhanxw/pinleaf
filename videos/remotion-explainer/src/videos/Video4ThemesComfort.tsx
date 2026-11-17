@@ -34,7 +34,7 @@ const Scene1ThemeCycle: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
       <PinleafWindow
-        heightPx={675}
+        heightPx={778}
         theme={current.key}
         keyPressChip={`Pressed  F8  →  Theme: ${current.label}`}
         panes={[
@@ -50,19 +50,19 @@ const Scene1ThemeCycle: React.FC = () => {
         ]}
       />
 
-      <div style={{ display: 'flex', gap: 12, fontFamily: FONT_SANS }}>
+      <div style={{ display: 'flex', gap: 14, fontFamily: FONT_SANS, alignItems: 'center' }}>
         {themes.map((t, i) => (
           <div
             key={t.key}
             style={{
-              padding: '7px 16px',
-              borderRadius: 10,
-              backgroundColor: i === idx ? 'rgba(192, 132, 252, 0.24)' : 'rgba(15, 23, 42, 0.85)',
-              border: i === idx ? '1.5px solid #c084fc' : '1px solid rgba(148,163,184,0.22)',
+              padding: '9px 18px',
+              borderRadius: 11,
+              backgroundColor: i === idx ? 'rgba(192, 132, 252, 0.28)' : 'rgba(15, 23, 42, 0.9)',
+              border: i === idx ? '2px solid #c084fc' : '1.5px solid rgba(148,163,184,0.28)',
               color: i === idx ? '#f3e8ff' : '#94a3b8',
               fontFamily: FONT_MONO,
-              fontSize: 13.5,
-              fontWeight: 700,
+              fontSize: 18,
+              fontWeight: 800,
             }}
           >
             {t.label}
@@ -70,12 +70,13 @@ const Scene1ThemeCycle: React.FC = () => {
         ))}
         <div
           style={{
-            padding: '7px 14px',
-            borderRadius: 10,
+            padding: '9px 18px',
+            borderRadius: 11,
             backgroundColor: '#020617',
-            border: '1px solid #334155',
+            border: '1.5px solid #334155',
             fontFamily: FONT_MONO,
-            fontSize: 13,
+            fontSize: 17.5,
+            fontWeight: 700,
             color: '#93c5fd',
           }}
         >
@@ -113,8 +114,8 @@ const Scene2SmartDarkPreserve: React.FC = () => {
         },
         {
           label: preserveOn
-            ? 'After (⇧F8): True-Color Figure Rects Preserved'
-            : 'Toggle ⇧F8 to Preserve Figures…',
+            ? 'After (⇧F8): True-Color Figure Rects'
+            : 'Press ⇧F8 to Preserve Figures…',
           active: true,
           pageProps: {
             pageNumber: 4,
@@ -124,7 +125,7 @@ const Scene2SmartDarkPreserve: React.FC = () => {
         },
       ]}
       statusBanner={{
-        text: 'hayro ImageRectDevice extracts raster figure bounds automatically per page',
+        text: 'hayro ImageRectDevice preserves raster plots automatically',
         tone: preserveOn ? 'ok' : 'info',
       }}
     />
@@ -143,8 +144,7 @@ const Scene3ComfortRulerAutoScroll: React.FC = () => {
   const showRuler = frame >= rulerAt;
   const scrolling = frame >= autoScrollAt;
 
-  const rulerStep =
-    frame < rulerAt + 14 ? 196 : frame < autoScrollAt ? 222 : 248;
+  const rulerStep = frame < rulerAt + 14 ? 214 : frame < autoScrollAt ? 244 : 296;
   const scrollOffset = scrolling
     ? Math.round(
         interpolate(frame, [autoScrollAt, durationInFrames], [0, 88], {
@@ -158,17 +158,17 @@ const Scene3ComfortRulerAutoScroll: React.FC = () => {
     <PinleafWindow
       keyPressChip={
         scrolling
-          ? 'F6 Auto-Scroll Active (⌥+ / ⌥- Speed 1.4×)'
+          ? 'F6 Auto-Scroll Active (⌥+ / ⌥- 1.4×)'
           : showRuler
-          ? 'R Reading Ruler Active (Step Lines with j / k)'
+          ? 'R Reading Ruler (Step j / k)'
           : fitContent
-          ? 'F10 / W  →  Fit to Content Width (Margins Cropped)'
+          ? 'F10 / W  →  Fit Content Width'
           : 'Default Fit Page Width (⌘0)'
       }
       zoomLabel={fitContent ? 'Content 142%' : 'Fit 118%'}
       panes={[
         {
-          label: fitContent ? 'Fit to Content Width • Margins Cropped' : 'Standard Fit Page',
+          label: fitContent ? 'Fit Content Width • Margins Cropped' : 'Standard Fit Page',
           active: true,
           pageProps: {
             pageNumber: 2,
@@ -181,7 +181,7 @@ const Scene3ComfortRulerAutoScroll: React.FC = () => {
       ]}
       statusBanner={
         scrolling
-          ? { text: '60 FPS Smooth Auto-Scroll active • Press F6 to pause or ⌥+/⌥- to tune velocity', tone: 'ok' }
+          ? { text: '60 FPS Auto-Scroll active • F6 pause • ⌥+/⌥- velocity', tone: 'ok' }
           : undefined
       }
     />

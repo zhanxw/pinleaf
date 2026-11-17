@@ -2,7 +2,7 @@ import React from 'react';
 import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import timingsJson from '../generated/timings.json';
 import type { TimingsManifest } from '../types';
-import { FONT_MONO, FONT_SANS } from '../components/StageFrame';
+import { FONT_MONO } from '../components/StageFrame';
 import { PinleafWindow } from '../components/PinleafWindow';
 import { VideoSequenceShell } from '../components/VideoSequenceShell';
 
@@ -19,10 +19,10 @@ const Scene1StandardAnnots: React.FC = () => {
 
   const highlights = [
     {
-      topPx: 215,
-      leftPercent: 8,
-      widthPercent: 37,
-      heightPx: 22,
+      topPx: 232,
+      leftPercent: 6,
+      widthPercent: 40,
+      heightPx: 26,
       color: '#facc15',
       label: '⌘H Highlight',
       kind: 'highlight' as const,
@@ -30,10 +30,10 @@ const Scene1StandardAnnots: React.FC = () => {
     ...(frame >= step2
       ? [
           {
-            topPx: 292,
-            leftPercent: 52,
-            widthPercent: 39,
-            heightPx: 20,
+            topPx: 320,
+            leftPercent: 51,
+            widthPercent: 40,
+            heightPx: 24,
             color: '#60a5fa',
             label: 'U Underline',
             kind: 'underline' as const,
@@ -43,10 +43,10 @@ const Scene1StandardAnnots: React.FC = () => {
     ...(frame >= step3
       ? [
           {
-            topPx: 332,
-            leftPercent: 52,
-            widthPercent: 33,
-            heightPx: 18,
+            topPx: 388,
+            leftPercent: 51,
+            widthPercent: 38,
+            heightPx: 22,
             color: '#f472b6',
             label: 'S Strikeout',
             kind: 'strikeout' as const,
@@ -61,7 +61,7 @@ const Scene1StandardAnnots: React.FC = () => {
         frame < step2
           ? '⌘H Highlight  •  ⌘M Note'
           : frame < savedAt
-          ? 'U Underline  •  S Strikeout  •  A Area Box'
+          ? 'U Underline • S Strikeout • A Box'
           : '⌘S  →  Saved Atomic ISO-32000 /Annots'
       }
       panes={[
@@ -72,14 +72,13 @@ const Scene1StandardAnnots: React.FC = () => {
             pageNumber: 1,
             focusSection: 'intro',
             highlights,
-            areaMarquee:
-              frame >= step3 ? { x: 52, y: 120, w: 40, h: 118 } : null,
+            areaMarquee: frame >= step3 ? { x: 51, y: 128, w: 43, h: 178 } : null,
           },
         },
       ]}
       statusBanner={
         frame >= savedAt
-          ? { text: 'Wrote standard /Highlight /Underline /StrikeOut /Square into PDF (Preview-compatible)', tone: 'ok' }
+          ? { text: 'Standard PDF /Highlight /Underline /Square saved (Preview-ready)', tone: 'ok' }
           : undefined
       }
     />
@@ -109,11 +108,11 @@ const Scene2TypedCategories: React.FC = () => {
   ];
 
   return (
-    <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', width: 1520, height: 760 }}>
-      <div style={{ flex: 1.55 }}>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', width: 1860, height: 850 }}>
+      <div style={{ flex: 1 }}>
         <PinleafWindow
-          widthPx={940}
-          heightPx={760}
+          widthPx={1160}
+          heightPx={850}
           keyPressChip={`Pressed  H + ${buckets[Math.min(phase, 3)].key}  →  [${buckets[Math.min(phase, 3)].key}] ${buckets[Math.min(phase, 3)].label}`}
           panes={[
             {
@@ -124,20 +123,20 @@ const Scene2TypedCategories: React.FC = () => {
                 focusSection: 'intro',
                 highlights: [
                   {
-                    topPx: 210,
-                    leftPercent: 8,
-                    widthPercent: 37,
-                    heightPx: 24,
+                    topPx: 228,
+                    leftPercent: 6,
+                    widthPercent: 40,
+                    heightPx: 26,
                     color: '#38bdf8',
                     label: '[t] Theorem',
                   },
                   ...(phase >= 1
                     ? [
                         {
-                          topPx: 300,
-                          leftPercent: 8,
-                          widthPercent: 35,
-                          heightPx: 22,
+                          topPx: 332,
+                          leftPercent: 6,
+                          widthPercent: 38,
+                          heightPx: 26,
                           color: '#34d399',
                           label: '[m] Method',
                         },
@@ -146,10 +145,10 @@ const Scene2TypedCategories: React.FC = () => {
                   ...(phase >= 2
                     ? [
                         {
-                          topPx: 292,
+                          topPx: 356,
                           leftPercent: 52,
-                          widthPercent: 38,
-                          heightPx: 22,
+                          widthPercent: 40,
+                          heightPx: 26,
                           color: '#facc15',
                           label: '[d] Definition',
                         },
@@ -158,10 +157,10 @@ const Scene2TypedCategories: React.FC = () => {
                   ...(phase >= 3
                     ? [
                         {
-                          topPx: 336,
+                          topPx: 422,
                           leftPercent: 52,
-                          widthPercent: 34,
-                          heightPx: 22,
+                          widthPercent: 38,
+                          heightPx: 26,
                           color: '#fb7185',
                           label: '[q] Question',
                         },
@@ -177,11 +176,11 @@ const Scene2TypedCategories: React.FC = () => {
       {/* Side Reference Card: 26 Categories + config.json */}
       <div
         style={{
-          flex: 1,
+          width: 680,
           borderRadius: 16,
-          backgroundColor: 'rgba(15, 23, 42, 0.92)',
-          border: '1px solid rgba(251, 191, 36, 0.38)',
-          padding: 22,
+          backgroundColor: 'rgba(15, 23, 42, 0.94)',
+          border: '1.5px solid rgba(251, 191, 36, 0.45)',
+          padding: 24,
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -189,41 +188,41 @@ const Scene2TypedCategories: React.FC = () => {
         }}
       >
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#fbbf24', marginBottom: 6 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#fbbf24', marginBottom: 6 }}>
             26 Typed Highlight Buckets (H + a–z)
           </div>
-          <div style={{ fontSize: 13.5, color: '#94a3b8', marginBottom: 14 }}>
-            Stored cleanly in PDF <span style={{ fontFamily: FONT_MONO }}>/Annots /Subj</span> &amp;{' '}
+          <div style={{ fontSize: 18, color: '#cbd5e1', marginBottom: 16 }}>
+            Saved cleanly in PDF <span style={{ fontFamily: FONT_MONO }}>/Annots /Subj</span> &amp;{' '}
             <span style={{ fontFamily: FONT_MONO }}>/C</span>:
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {buckets.map((b) => (
               <div
                 key={b.key}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 9,
-                  padding: '8px 10px',
-                  borderRadius: 9,
-                  backgroundColor: b.active ? `${b.color}24` : 'rgba(30, 41, 59, 0.7)',
-                  border: `1.5px solid ${b.active ? b.color : 'rgba(148,163,184,0.18)'}`,
+                  gap: 11,
+                  padding: '11px 13px',
+                  borderRadius: 10,
+                  backgroundColor: b.active ? `${b.color}28` : 'rgba(30, 41, 59, 0.78)',
+                  border: `2px solid ${b.active ? b.color : 'rgba(148,163,184,0.22)'}`,
                 }}
               >
                 <span
                   style={{
                     fontFamily: FONT_MONO,
                     fontWeight: 800,
-                    fontSize: 14,
-                    padding: '2px 8px',
-                    borderRadius: 6,
+                    fontSize: 19,
+                    padding: '3px 10px',
+                    borderRadius: 7,
                     backgroundColor: b.color,
                     color: '#0f172a',
                   }}
                 >
                   {b.key}
                 </span>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{b.label}</span>
+                <span style={{ fontSize: 19, fontWeight: 700 }}>{b.label}</span>
               </div>
             ))}
           </div>
@@ -231,14 +230,14 @@ const Scene2TypedCategories: React.FC = () => {
 
         <div
           style={{
-            borderRadius: 10,
+            borderRadius: 12,
             backgroundColor: '#020617',
-            border: '1px solid #334155',
-            padding: 14,
+            border: '1.5px solid #334155',
+            padding: 16,
             fontFamily: FONT_MONO,
-            fontSize: 12.5,
+            fontSize: 17,
             lineHeight: 1.5,
-            color: '#cbd5e1',
+            color: '#e2e8f0',
           }}
         >
           <div style={{ color: '#94a3b8', marginBottom: 4 }}>~/.config/pinleaf/config.json</div>
@@ -330,7 +329,7 @@ const Scene4GlobalLibraryScholar: React.FC = () => {
       keyPressChip={
         showScholar
           ? '⇧⌘K  →  Lookup DOI / Google Scholar'
-          : '⇧⌘F  →  Global Highlight Search Across All PDFs'
+          : '⇧⌘F  →  Global Highlight Search Across PDFs'
       }
       panes={[
         {
@@ -365,7 +364,7 @@ const Scene4GlobalLibraryScholar: React.FC = () => {
       }}
       statusBanner={
         showScholar
-          ? { text: 'Opening https://doi.org/10.1145/3597503.3623310 in browser', tone: 'ok' }
+          ? { text: 'Opening https://doi.org/10.1145/3597503.3623310', tone: 'ok' }
           : undefined
       }
     />

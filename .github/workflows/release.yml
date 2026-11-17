@@ -78,8 +78,8 @@ jobs:
           mkdir -p dist/release
           cp dist/Pinleaf.dmg "dist/release/Pinleaf-${TAG}-macos-universal.dmg"
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent dist/Pinleaf.app "dist/release/Pinleaf-${TAG}-macos-universal.app.zip"
-          cp docs/videos/*.mp4 dist/release/
-          (cd dist/release && shasum -a 256 Pinleaf-* *.mp4 > SHA256SUMS.txt)
+          cp docs/videos/*.mp4 install.sh dist/release/
+          (cd dist/release && shasum -a 256 Pinleaf-* *.mp4 install.sh > SHA256SUMS.txt)
           ls -lh dist/release/
           cat dist/release/SHA256SUMS.txt
 

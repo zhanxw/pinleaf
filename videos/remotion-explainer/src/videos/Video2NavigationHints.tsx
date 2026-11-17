@@ -15,21 +15,25 @@ const Scene1CommandPalette: React.FC = () => {
 
   const fullQuery = 'hint';
   const charCount = Math.floor(
-    interpolate(frame, [Math.round(durationInFrames * 0.35), Math.round(durationInFrames * 0.78)], [0, fullQuery.length], {
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    }),
+    interpolate(
+      frame,
+      [Math.round(durationInFrames * 0.35), Math.round(durationInFrames * 0.78)],
+      [0, fullQuery.length],
+      { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    ),
   );
   const query = fullQuery.slice(0, charCount);
   const allItems = [
     { category: 'Navigation & Search', title: 'Search Document Text', shortcut: '⌘F' },
-    { category: 'Portals, Hints & SyncTeX', title: 'Keyboard Hint Jump (Links & Smart Refs)', shortcut: ';' },
-    { category: 'Portals, Hints & SyncTeX', title: 'Keyboard Hint Overview Preview', shortcut: ':' },
-    { category: 'Portals, Hints & SyncTeX', title: 'Keyboard Hint Text Select', shortcut: 'V' },
-    { category: 'Navigation & Search', title: 'Cycle Reading Theme (Light / Dark / Sepia / Custom)', shortcut: 'F8' },
+    { category: 'Portals & Hints', title: 'Keyboard Hint Jump (Links & Refs)', shortcut: ';' },
+    { category: 'Portals & Hints', title: 'Keyboard Hint Overview Preview', shortcut: ':' },
+    { category: 'Portals & Hints', title: 'Keyboard Hint Text Select', shortcut: 'V' },
+    { category: 'Appearance', title: 'Cycle Theme (Light/Dark/Sepia/Custom)', shortcut: 'F8' },
   ];
   const filtered = query
-    ? allItems.filter((it) => it.title.toLowerCase().includes(query) || it.category.toLowerCase().includes(query))
+    ? allItems.filter(
+        (it) => it.title.toLowerCase().includes(query) || it.category.toLowerCase().includes(query),
+      )
     : allItems;
 
   return (
@@ -63,21 +67,21 @@ const Scene2SmartJumpOverview: React.FC = () => {
     config: { damping: 18, stiffness: 200 },
   });
 
-  const cursorX = interpolate(frame, [8, overviewAt - 6], [24, 38.5], {
+  const cursorX = interpolate(frame, [8, overviewAt - 6], [22, 39], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const cursorY = interpolate(frame, [8, overviewAt - 6], [42, 29], {
+  const cursorY = interpolate(frame, [8, overviewAt - 6], [42, 26], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
 
   return (
     <PinleafWindow
-      keyPressChip={showOverview ? 'Right-Click "Figure 1" → Floating Overview' : 'Hovering Unlinked Ref'}
+      keyPressChip={showOverview ? 'Right-Click "Figure 1" → Overview Card' : 'Hovering Unlinked Ref'}
       panes={[
         {
-          label: 'Pane #1 • Heuristic Smart Jump (Unlinked PDF Refs)',
+          label: 'Pane #1 • Heuristic Smart Jump (Unlinked Refs)',
           active: true,
           pageProps: {
             pageNumber: 1,
@@ -92,10 +96,10 @@ const Scene2SmartJumpOverview: React.FC = () => {
         showOverview
           ? {
               title: 'Figure 1 (Resolved Target)',
-              pageLabel: 'Page 3 • Auto-Detected',
+              pageLabel: 'Page 3 • Smart Ref',
               snippet:
-                'Empirical branch switch latency across 4 reading architectures: Scroll (68ms), Tabs (52ms), Split (38ms), Scroll-Linked Portal (20ms). Stay on Page 1 while inspecting target.',
-              xPercent: 45,
+                'Branch switch latency: Scroll (68ms), Tabs (52ms), Split (38ms), Scroll-Linked Portal (20ms). Inspect targets right in place without scrolling.',
+              xPercent: 48,
               yPercent: 20,
               scale: interpolate(overviewPop, [0, 1], [0.88, 1]),
             }
@@ -122,29 +126,29 @@ const Scene3VimiumHints: React.FC = () => {
 
   const hints = inSelectMode
     ? [
-        { code: 'as', xPercent: 11, yPercent: 25, typedPrefix: typedFirstChar ? 'a' : undefined },
-        { code: 'df', xPercent: 26, yPercent: 31, typedPrefix: typedFirstChar ? 'd' : undefined },
-        { code: 'jk', xPercent: 18, yPercent: 49, active: true, typedPrefix: typedFirstChar ? 'j' : undefined },
-        { code: 'kl', xPercent: 37, yPercent: 54, active: frame >= selectPhaseAt + 24 },
+        { code: 'as', xPercent: 12, yPercent: 24, typedPrefix: typedFirstChar ? 'a' : undefined },
+        { code: 'df', xPercent: 26, yPercent: 24, typedPrefix: typedFirstChar ? 'd' : undefined },
+        { code: 'jk', xPercent: 35, yPercent: 24, active: true, typedPrefix: typedFirstChar ? 'j' : undefined },
+        { code: 'kl', xPercent: 21, yPercent: 30, active: frame >= selectPhaseAt + 24 },
       ]
     : [
-        { code: 'as', xPercent: 19, yPercent: 27, active: true, typedPrefix: typedFirstChar ? 'a' : undefined },
-        { code: 'df', xPercent: 36, yPercent: 27 },
-        { code: 'gh', xPercent: 22, yPercent: 60 },
-        { code: 'jk', xPercent: 72, yPercent: 63 },
+        { code: 'as', xPercent: 18, yPercent: 17, active: true, typedPrefix: typedFirstChar ? 'a' : undefined },
+        { code: 'df', xPercent: 39, yPercent: 17 },
+        { code: 'gh', xPercent: 12, yPercent: 34 },
+        { code: 'jk', xPercent: 36, yPercent: 34 },
       ];
 
   return (
     <PinleafWindow
       keyPressChip={
         inSelectMode
-          ? 'Pressed  V  →  2-Endpoint Hint Text Select (jk → kl)'
-          : 'Pressed  ;  (Jump)  or  :  (Overview)  →  Home-Row Hints'
+          ? 'Pressed  V  →  2-Endpoint Hint Select (jk → kl)'
+          : 'Pressed  ;  (Jump) /  :  (Overview)  →  Hints'
       }
       panes={[
         {
           label: inSelectMode
-            ? 'Hint Select Mode • Pick Start & End Word Hints'
+            ? 'Hint Select Mode • Pick Start & End Words'
             : 'Hint Jump Mode • 2-Letter Home-Row Badges',
           active: true,
           pageProps: {
@@ -157,8 +161,8 @@ const Scene3VimiumHints: React.FC = () => {
       ]}
       statusBanner={{
         text: inSelectMode
-          ? 'Selected range ready for ⌘C copy or H+category highlight — zero mouse needed'
-          : 'HINT_MODE_CONTEXT blocks single-key shortcuts cleanly during hint entry',
+          ? 'Selected range ready for ⌘C copy or H+category highlight'
+          : 'HINT_MODE_CONTEXT isolates hint keystrokes cleanly',
         tone: 'ok',
       }}
     />
@@ -180,29 +184,29 @@ const Scene4TocSearchMarks: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
       <PinleafWindow
-        heightPx={675}
-        keyPressChip="T: Auto-TOC  •  ⌘F: Regex Search  •  m/`: Marks"
+        heightPx={778}
+        keyPressChip="T: Auto-TOC  •  ⌘F: Regex  •  m/`: Marks"
         panes={[
           {
-            label: 'Pane #1 • TOC, Search & Marks',
+            label: 'Pane #1 • Auto-TOC, Regex Search & Marks',
             active: true,
             pageProps: {
               pageNumber: 3,
               focusSection: 'theorem',
               highlights: [
                 {
-                  topPx: 215,
-                  leftPercent: 8,
-                  widthPercent: 18,
-                  heightPx: 20,
+                  topPx: 212,
+                  leftPercent: 6,
+                  widthPercent: 20,
+                  heightPx: 24,
                   color: '#34d399',
                   label: 'Theorem 1',
                 },
                 {
-                  topPx: 295,
+                  topPx: 316,
                   leftPercent: 52,
-                  widthPercent: 18,
-                  heightPx: 20,
+                  widthPercent: 22,
+                  heightPx: 24,
                   color: '#60a5fa',
                   label: 'Theorem 2',
                 },
@@ -225,26 +229,27 @@ const Scene4TocSearchMarks: React.FC = () => {
         }}
       />
 
-      <div style={{ display: 'flex', gap: 14, fontFamily: FONT_SANS }}>
+      <div style={{ display: 'flex', gap: 16, fontFamily: FONT_SANS }}>
         {[
           { k: 'm a  /  ` a', l: 'Set & Jump Named Mark' },
-          { k: '⌘[  /  ⌘]', l: 'Jump Back / Forward (^O / ^I)' },
+          { k: '⌘[  /  ⌘]', l: 'Jump History (^O / ^I)' },
           { k: 'j k d u g G', l: 'Vim Scroll Keys' },
         ].map((chip) => (
           <div
             key={chip.k}
             style={{
-              padding: '7px 14px',
-              borderRadius: 10,
-              backgroundColor: 'rgba(15, 23, 42, 0.85)',
-              border: '1px solid rgba(96, 165, 250, 0.35)',
-              fontSize: 14,
-              color: '#e2e8f0',
+              padding: '9px 18px',
+              borderRadius: 11,
+              backgroundColor: 'rgba(15, 23, 42, 0.9)',
+              border: '1.5px solid rgba(96, 165, 250, 0.45)',
+              fontSize: 19,
+              fontWeight: 700,
+              color: '#f1f5f9',
               display: 'flex',
-              gap: 8,
+              gap: 10,
             }}
           >
-            <span style={{ fontFamily: FONT_MONO, fontWeight: 700, color: '#60a5fa' }}>{chip.k}</span>
+            <span style={{ fontFamily: FONT_MONO, fontWeight: 800, color: '#60a5fa' }}>{chip.k}</span>
             <span>{chip.l}</span>
           </div>
         ))}

@@ -20,30 +20,52 @@
   </a>
 </p>
 
+```sh
+curl -fsSL https://raw.githubusercontent.com/zhanxw/pinleaf/main/install.sh | sh
+```
+
+> Installs the latest Universal (`arm64` + `x86_64`) `Pinleaf.app`, verifies SHA-256 checksums, clears Gatekeeper quarantine, and links the `pinleaf` CLI.
+
 ---
 
 ## Video Walkthroughs
 
-New to Pinleaf? Watch the 30–37 second narrated **1080p** explainer videos covering each feature category, or read the full [Feature Tour & Recipes](docs/FEATURE_TOUR.md).
+New to Pinleaf? Browse the full-width feature demos below, stream/download the narrated **1080p `.mp4`** files with voiceover, or read the [Feature Tour & Recipes](docs/FEATURE_TOUR.md).
 
 ### 01. Multi-View Freeze-and-Branch & Scroll-Linked Portals (30s)
 
-<p align="center">
-  <img src="docs/videos/01-freeze-and-portals.gif" width="840" alt="Pinleaf Multi-View Freeze-and-Branch & Scroll Portals" />
-</p>
+<img src="docs/videos/01-freeze-and-portals.gif" width="100%" alt="Pinleaf Multi-View Freeze-and-Branch & Scroll Portals" />
 
 Freeze source context (`F` / `⌘D`), branch unlimited child panes (`#1 🔒 → #2 🔒 → #3`), smart-route references without scrolling away, and bind scroll-linked portals (`P` / `⇧P`) so helper panes auto-follow figures and equations as you read.
-- **1080p Video with Audio:** [Download / Stream 01-freeze-and-portals.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/01-freeze-and-portals.mp4) · [`docs/videos/01-freeze-and-portals.mp4`](docs/videos/01-freeze-and-portals.mp4)
+- **1080p Video with Audio:** [Download / Stream 01-freeze-and-portals.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/01-freeze-and-portals.mp4) · [`docs/videos/01-freeze-and-portals.mp4`](docs/videos/01-freeze-and-portals.mp4)
 
-| **02. Smart Jump, Keyboard Hints & Navigation (36s)** | **03. ISO-32000 Annotations, 26 Categories & Library (37s)** |
-| :---: | :---: |
-| <img src="docs/videos/02-navigation-smart-jump-hints.gif" width="430" alt="Smart Jump, Vimium Hints & Navigation" /> | <img src="docs/videos/03-annotations-categories-library.gif" width="430" alt="PDF Annotations, 26 Categories & Library" /> |
-| Command Palette (`/` / `?`), Smart Jump & Right-Click Overview previews, 2-letter Vimium hints (`;` / `:` / `V`), Auto-TOC (`T`), regex search (`⌘F`), marks (`m` / `` ` ``)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/02-navigation-smart-jump-hints.mp4) · [repo copy](docs/videos/02-navigation-smart-jump-hints.mp4) | Column-aware highlights (`⌘H`), notes (`⌘M`), underline (`U`), strikeout (`S`), area box (`A`), atomic PDF `/Annots` saves (`⌘S`), 26 categories (`H + a–z`), sidebar filter chips (`⇧⌘A`), Global Search (`⇧⌘F`), Scholar/DOI (`⇧⌘K`)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/03-annotations-categories-library.mp4) · [repo copy](docs/videos/03-annotations-categories-library.mp4) |
+### 02. Smart Jump, Keyboard Hints & Rapid Navigation (36s)
 
-| **04. Smart Dark Mode, Comfort & Presentation (35s)** | **05. Live Auto-Reload, SyncTeX, CLI IPC & Extensions (36s)** |
-| :---: | :---: |
-| <img src="docs/videos/04-themes-comfort-presentation.gif" width="430" alt="Smart Dark Mode, Comfort & Presentation Mode" /> | <img src="docs/videos/05-synctex-ipc-extensions.gif" width="430" alt="SyncTeX, CLI IPC & Shell Extensions" /> |
-| Light / Dark / Sepia / Custom hex themes (`F8`), figure-preserving Smart Dark Mode (`⇧F8`), Fit Content Width (`F10` / `W`), Reading Ruler (`R`), 60 FPS Auto-Scroll (`F6`), Presentation Mode (`F5`)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/04-themes-comfort-presentation.mp4) · [repo copy](docs/videos/04-themes-comfort-presentation.mp4) | 800 ms TeX/Typst auto-reload, pure-Rust `.synctex.gz` forward (`--synctex-forward`) & inverse (`⌘+Click` / `⇧⌘J`), Unix socket IPC (`--execute-command`), shell/Python extensions (`⇧⌘E`)<br/>[▶ 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.0/05-synctex-ipc-extensions.mp4) · [repo copy](docs/videos/05-synctex-ipc-extensions.mp4) |
+<img src="docs/videos/02-navigation-smart-jump-hints.gif" width="100%" alt="Smart Jump, Vimium Hints & Navigation" />
+
+Open the Command Palette (`/` / `?`), resolve unlinked references via Smart Jump or Right-Click `Overview` cards, navigate hands-free with Vimium 2-letter home-row hints (`;` / `:` / `V`), filter Auto-TOC outlines (`T` / `⌘T`), run `re:` regex search (`⌘F`), and set named marks (`m` / `` ` ``).
+- **1080p Video with Audio:** [Download / Stream 02-navigation-smart-jump-hints.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/02-navigation-smart-jump-hints.mp4) · [`docs/videos/02-navigation-smart-jump-hints.mp4`](docs/videos/02-navigation-smart-jump-hints.mp4)
+
+### 03. ISO-32000 PDF Annotations, 26 Categories & Library (37s)
+
+<img src="docs/videos/03-annotations-categories-library.gif" width="100%" alt="PDF Annotations, 26 Categories & Library" />
+
+Select cleanly across columns to highlight (`⌘H`), add notes (`⌘M`), underline (`U`), strikeout (`S`), or draw figure marquees (`A`) with atomic PDF `/Annots` saves (`⌘S`), tag across 26 highlight categories (`H + a–z`), filter in the Notes Sidebar (`⇧⌘A`), search highlights globally (`⇧⌘F`), or open DOIs on Google Scholar (`⇧⌘K`).
+- **1080p Video with Audio:** [Download / Stream 03-annotations-categories-library.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/03-annotations-categories-library.mp4) · [`docs/videos/03-annotations-categories-library.mp4`](docs/videos/03-annotations-categories-library.mp4)
+
+### 04. Smart Dark Mode, Comfort & Presentation Mode (35s)
+
+<img src="docs/videos/04-themes-comfort-presentation.gif" width="100%" alt="Smart Dark Mode, Comfort & Presentation Mode" />
+
+Cycle `Light`, `Dark`, `Sepia`, and `Custom` hex palettes (`F8`), keep raster plots crisp and un-inverted inside dark modes (`⇧F8`), crop side margins (`F10` / `W`), step lines with the Reading Ruler (`R`), stream smoothly with 60 FPS Auto-Scroll (`F6`), and switch to fullscreen Presentation Mode (`F5`).
+- **1080p Video with Audio:** [Download / Stream 04-themes-comfort-presentation.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/04-themes-comfort-presentation.mp4) · [`docs/videos/04-themes-comfort-presentation.mp4`](docs/videos/04-themes-comfort-presentation.mp4)
+
+### 05. Live Auto-Reload, Two-Way SyncTeX, CLI IPC & Extensions (36s)
+
+<img src="docs/videos/05-synctex-ipc-extensions.gif" width="100%" alt="SyncTeX, CLI IPC & Shell Extensions" />
+
+Reload edited TeX/Typst PDFs automatically without losing scroll anchors, jump both ways with pure-Rust `.synctex.gz` (`--synctex-forward` / `⌘+Click` / `⇧⌘J`), script live windows over Unix socket IPC (`--execute-command`), and run shell/Python workflows (`⇧⌘E` + custom hotkeys).
+- **1080p Video with Audio:** [Download / Stream 05-synctex-ipc-extensions.mp4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/05-synctex-ipc-extensions.mp4) · [`docs/videos/05-synctex-ipc-extensions.mp4`](docs/videos/05-synctex-ipc-extensions.mp4)
 
 ---
 
@@ -70,6 +92,21 @@ Freeze source context (`F` / `⌘D`), branch unlimited child panes (`#1 🔒 →
 ---
 
 ## Installation (macOS)
+
+### Quick One-Line Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zhanxw/pinleaf/main/install.sh | sh
+```
+
+- Installs `Pinleaf.app` into `/Applications` (or `~/Applications` if `/Applications` is not writable), verifies `SHA256SUMS.txt`, strips Gatekeeper quarantine, and links `pinleaf` into `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`.
+- Customize via flags or env vars:
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/zhanxw/pinleaf/main/install.sh | sh -s -- --version v0.2.1 --no-cli
+  # Env vars: PINLEAF_VERSION, PINLEAF_INSTALL_DIR, PINLEAF_BIN_DIR
+  ```
+
+### Manual DMG Install
 
 1. Download `Pinleaf-v*-macos-universal.dmg` (or `.app.zip`) from [GitHub Releases](https://github.com/zhanxw/pinleaf/releases).
 2. Drag `Pinleaf.app` into `/Applications`.

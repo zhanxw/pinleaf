@@ -102,17 +102,17 @@ export const StageFrame: React.FC<StageFrameProps> = ({
       <div
         style={{
           position: 'absolute',
-          top: 26,
-          left: 48,
-          right: 48,
-          height: 76,
+          top: 14,
+          left: 22,
+          right: 22,
+          height: 74,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 24px',
-          borderRadius: 18,
-          backgroundColor: 'rgba(15, 23, 42, 0.78)',
-          border: '1px solid rgba(148, 163, 184, 0.2)',
+          padding: '0 22px',
+          borderRadius: 16,
+          backgroundColor: 'rgba(15, 23, 42, 0.84)',
+          border: '1px solid rgba(148, 163, 184, 0.24)',
           boxShadow: '0 14px 40px rgba(0, 0, 0, 0.35)',
           opacity: interpolate(headerEnter, [0, 1], [0.88, 1]),
         }}
@@ -121,9 +121,9 @@ export const StageFrame: React.FC<StageFrameProps> = ({
           <Img
             src={staticFile('pinleaf-icon.png')}
             style={{
-              width: 46,
-              height: 46,
-              borderRadius: 11,
+              width: 48,
+              height: 48,
+              borderRadius: 12,
               boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
             }}
           />
@@ -131,39 +131,39 @@ export const StageFrame: React.FC<StageFrameProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span
                 style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  letterSpacing: '0.07em',
                   color: video.accent,
                   textTransform: 'uppercase',
                 }}
               >
-                Pinleaf Feature Guide • {video.episode}
+                Pinleaf Guide • {video.episode}
               </span>
               <span
                 style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: '#94a3b8',
-                  padding: '2px 8px',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: '#cbd5e1',
+                  padding: '2px 10px',
                   borderRadius: 999,
-                  backgroundColor: 'rgba(148, 163, 184, 0.12)',
+                  backgroundColor: 'rgba(148, 163, 184, 0.16)',
                 }}
               >
                 Scene {sceneIndex + 1}/{video.scenes.length}
               </span>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>
+            <div style={{ fontSize: 27, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
               {video.title}
               <span style={{ color: '#64748b', margin: '0 10px' }}>/</span>
-              <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{scene.sceneTitle}</span>
+              <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{scene.sceneTitle}</span>
             </div>
           </div>
         </div>
 
         {/* Shortcut badge + step pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
             {video.scenes.map((s, idx) => {
               const active = idx === sceneIndex;
               const done = idx < sceneIndex;
@@ -171,8 +171,8 @@ export const StageFrame: React.FC<StageFrameProps> = ({
                 <div
                   key={s.id}
                   style={{
-                    width: active ? 28 : 10,
-                    height: 10,
+                    width: active ? 30 : 11,
+                    height: 11,
                     borderRadius: 999,
                     backgroundColor: active
                       ? video.accent
@@ -186,17 +186,17 @@ export const StageFrame: React.FC<StageFrameProps> = ({
           </div>
           <div
             style={{
-              transform: `scale(${interpolate(badgePop, [0, 1], [0.88, 1])})`,
+              transform: `scale(${interpolate(badgePop, [0, 1], [0.9, 1])})`,
               opacity: badgePop,
-              padding: '8px 16px',
+              padding: '8px 18px',
               borderRadius: 12,
-              backgroundColor: 'rgba(2, 6, 23, 0.85)',
-              border: `1.5px solid ${video.accent}88`,
+              backgroundColor: 'rgba(2, 6, 23, 0.9)',
+              border: `2px solid ${video.accent}aa`,
               fontFamily: FONT_MONO,
-              fontSize: 17,
-              fontWeight: 700,
+              fontSize: 23,
+              fontWeight: 800,
               color: video.accent,
-              boxShadow: `0 0 24px ${video.accent}22`,
+              boxShadow: `0 0 24px ${video.accent}28`,
               whiteSpace: 'nowrap',
             }}
           >
@@ -205,14 +205,14 @@ export const StageFrame: React.FC<StageFrameProps> = ({
         </div>
       </div>
 
-      {/* Main Visual Stage */}
+      {/* Main Visual Stage (1876 x 876) */}
       <div
         style={{
           position: 'absolute',
-          top: 120,
-          left: 48,
-          right: 48,
-          bottom: hideCaption ? 34 : 114,
+          top: 98,
+          left: 22,
+          right: 22,
+          bottom: hideCaption ? 22 : 106,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -226,9 +226,9 @@ export const StageFrame: React.FC<StageFrameProps> = ({
         <div
           style={{
             position: 'absolute',
-            left: 96,
-            right: 96,
-            bottom: 24,
+            left: 32,
+            right: 32,
+            bottom: 12,
             display: 'flex',
             justifyContent: 'center',
             opacity: captionEnter * captionExit,
@@ -237,16 +237,16 @@ export const StageFrame: React.FC<StageFrameProps> = ({
         >
           <div
             style={{
-              maxWidth: 1460,
-              padding: '13px 26px',
+              maxWidth: 1820,
+              padding: '10px 26px',
               borderRadius: 14,
-              backgroundColor: 'rgba(10, 15, 29, 0.9)',
-              border: '1px solid rgba(148, 163, 184, 0.22)',
-              boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
-              fontSize: 23,
-              lineHeight: 1.38,
-              fontWeight: 500,
-              color: '#f1f5f9',
+              backgroundColor: 'rgba(10, 15, 29, 0.94)',
+              border: '1px solid rgba(148, 163, 184, 0.28)',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.48)',
+              fontSize: 27,
+              lineHeight: 1.28,
+              fontWeight: 600,
+              color: '#f8fafc',
               textAlign: 'center',
             }}
           >
@@ -261,7 +261,7 @@ export const StageFrame: React.FC<StageFrameProps> = ({
           position: 'absolute',
           bottom: 0,
           left: 0,
-          height: 4,
+          height: 5,
           width: `${((sceneIndex + sceneProgress) / video.scenes.length) * 100}%`,
           background: `linear-gradient(90deg, ${video.accent}, #38bdf8)`,
         }}
