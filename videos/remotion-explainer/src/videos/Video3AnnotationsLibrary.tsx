@@ -57,6 +57,7 @@ const Scene1StandardAnnots: React.FC = () => {
 
   return (
     <PinleafWindow
+      dirty={frame < savedAt}
       keyPressChip={
         frame < step2
           ? '⌘H Highlight  •  ⌘M Note'

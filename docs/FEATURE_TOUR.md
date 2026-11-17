@@ -6,7 +6,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 01 — Multi-View Freeze-and-Branch & Scroll-Linked Portals
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/01-freeze-and-portals.mp4) · [Local Repo File](videos/01-freeze-and-portals.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/01-freeze-and-portals.mp4) · [Local Repo File](videos/01-freeze-and-portals.mp4)
 
 ![Multi-View Freeze-and-Branch & Scroll Portals](videos/01-freeze-and-portals.png)
 
@@ -17,22 +17,22 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ---
 
-## Video 02 — Smart Jump, Keyboard Hints & Rapid Navigation
+## Video 02 — Go-to-Page, Thumbnails, Smart Jump & Hints
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/02-navigation-smart-jump-hints.mp4) · [Local Repo File](videos/02-navigation-smart-jump-hints.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/02-navigation-smart-jump-hints.mp4) · [Local Repo File](videos/02-navigation-smart-jump-hints.mp4)
 
-![Smart Jump & Vimium 2-Letter Hints](videos/02-navigation-smart-jump-hints.png)
+![Go-to-Page, Page Thumbnails, Smart Jump & Hints](videos/02-navigation-smart-jump-hints.png)
 
-1. **Instant Command Palette (`/` or `?`)** — Inspect every action, read descriptions and platform-native shortcuts, and fuzzy-filter commands cleanly.
-2. **Heuristic Smart Jump & Floating Overview (`Click` / `Right-Click`)** — Even in PDFs without embedded `/Link` annotations, Pinleaf detects `Figure N`, `Theorem N`, `Table N`, `Eq. (N)`, and numbered citations (`[12]`). Left-click jumps; right-click opens a floating **Overview** card right where you are.
-3. **Vimium Two-Letter Hints (`;`, `:`, `V`)** — Stay completely keyboard-driven: `;` overlays home-row 2-letter badges (`as`, `df`, `jk`, …) over visible links and academic refs to jump; `:` opens an Overview popup from keyboard; `V` selects text between any two hinted words.
-4. **Auto-TOC, Regex Search & Named Marks** — Toggle embedded or font-inferred outlines (`T` / `⌘T`), search with `re:` regular expressions (`⌘F`, `n`/`N`), store single-key marks (`m + a`, jump with `` ` + a ``), rewind jump history (`⌘[` / `⌘]`, `^O` / `^I`), and scroll with `j`/`k`/`d`/`u`/`g`/`G`.
+1. **Command Palette & Go to Page (`/`, `⌥⌘G`, `<num>G`)** — Type a page number straight into the `/` Command Palette (`/4`), open the `⌥⌘G` / `^G` Go-to-Page modal, click the pane's `p.X/Y` pill, or type `<number>G` directly inside a pane.
+2. **Heuristic Smart Jump & Keyboard Overview (`Enter`, `S`, `Esc`)** — Even in PDFs without embedded `/Link` annotations, Pinleaf detects `Figure N`, `Theorem N`, `Table N`, `Eq. (N)`, and numbered citations (`[12]`). Right-click or press `:` + two letters for a floating **Overview** card, then press `Enter` to jump, `S` / `⌘+Enter` to split right, `P` to bind a Portal, or `Esc` / `X` to close.
+3. **Page Thumbnails Strip (`⇧⌘T`) & 4-Column Grid (`⌥⌘T`)** — Toggle the virtualized left Page Thumbnails strip (`⇧⌘T` or toolbar **Pages**, `⌘+Click` to split right), or open the 4-column Thumbnail Grid overview (`⌥⌘T`, arrow/`hjkl` movement, `Enter` to jump, `⌘+Enter` to split right).
+4. **Vimium Hints (`;`, `V`), Auto-TOC (`T`), Regex Search (`⌘F`) & `Space` Scroll** — Navigate completely via keyboard with 2-letter hints (`;`, `V`), font-inferred outlines (`T`), `re:` regex search (`⌘F`), single-key marks (`m` / `` ` ``), jump history (`⌘[` / `⌘]`), and Preview-style `Space` / `⇧Space` screen scrolling.
 
 ---
 
 ## Video 03 — ISO-32000 PDF Annotations, 26 Categories & Library
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/03-annotations-categories-library.mp4) · [Local Repo File](videos/03-annotations-categories-library.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/03-annotations-categories-library.mp4) · [Local Repo File](videos/03-annotations-categories-library.mp4)
 
 ![26 Typed Highlight Categories & Sidebar Filters](videos/03-annotations-categories-library.png)
 
@@ -45,7 +45,7 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 04 — Smart Dark Mode, Comfort & Presentation Mode
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/04-themes-comfort-presentation.mp4) · [Local Repo File](videos/04-themes-comfort-presentation.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/04-themes-comfort-presentation.mp4) · [Local Repo File](videos/04-themes-comfort-presentation.mp4)
 
 ![Smart Dark Mode Figure Preservation](videos/04-themes-comfort-presentation.png)
 
@@ -58,14 +58,14 @@ This companion guide walks through every scene in Pinleaf's five introductory vi
 
 ## Video 05 — LaTeX/Typst Live Workflow: SyncTeX, CLI IPC & Extensions
 
-> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.1/05-synctex-ipc-extensions.mp4) · [Local Repo File](videos/05-synctex-ipc-extensions.mp4)
+> ▶ [Download 1080p MP4](https://github.com/zhanxw/pinleaf/releases/download/v0.2.2/05-synctex-ipc-extensions.mp4) · [Local Repo File](videos/05-synctex-ipc-extensions.mp4)
 
 ![Two-Way SyncTeX & Editor Integration](videos/05-synctex-ipc-extensions.png)
 
 1. **800 ms Live PDF Auto-Reload** — Watches mtime changes from `latexmk -pvc` or `typst watch` while keeping scroll positions, zoom levels, and split trees intact.
 2. **Pure-Rust Two-Way SyncTeX (`.synctex.gz` / `.synctex`)** — Forward-search from any editor (`pinleaf --synctex-forward <line[:col]:file.tex> <paper.pdf>`) highlights target output lines in cyan; inverse-search (`⌘+Click` or `⇧⌘J`) launches your configured editor (`code`, `cursor`, `subl`, or custom `inverse_search_command`).
-3. **Unix Domain Socket CLI IPC (`--execute-command`)** — Control running Pinleaf windows over `$TMPDIR/pinleaf-$USER.sock` (mode `0600`) for `goto_page`, `split_right`, `cycle_color_mode`, `search`, `toggle_presentation`, or `quit`.
-4. **Shell & Python Extensions (`⇧⌘E`)** — Run custom scripts with shell-safe single-quoted placeholders (`{selected_text}`, `{file_path}`, `{page}`, `{line_text}`, `{doi}`) and `PINLEAF_*` environment variables.
+3. **Unix Domain Socket CLI IPC (`--execute-command`)** — Control running Pinleaf windows over `$TMPDIR/pinleaf-$USER.sock` (mode `0600`) for `goto_page`, `toggle_thumbnails`, `toggle_thumbnail_grid`, `split_right`, `cycle_color_mode`, `search`, `toggle_presentation`, or `quit`.
+4. **Shell & Python Extensions (`⇧⌘E`) & About Pinleaf** — Run custom scripts with shell-safe single-quoted placeholders (`{selected_text}`, `{file_path}`, `{page}`, `{line_text}`, `{doi}`) and `PINLEAF_*` environment variables, and click the top-left `Pinleaf` button (or macOS menu bar) for **About Pinleaf** (`Copy Version`).
 
 ---
 

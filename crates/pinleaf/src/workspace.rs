@@ -2,12 +2,14 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use gpui::{
     AnyElement, AnyWindowHandle, App, Axis, Bounds, ClipboardItem, Context, Entity, FocusHandle,
     FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseMoveEvent, PathPromptOptions, Pixels,
-    Render, Subscription, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, img,
-    prelude::*, px, rgb, rgba, size,
+    Render, RenderImage, ScrollStrategy, Subscription, TitlebarOptions, UniformListScrollHandle,
+    Window, WindowBounds, WindowOptions, canvas, div, img, prelude::*, px, rgb, rgba, size,
+    uniform_list,
 };
 use pinleaf_core::{
     AnnotationId, AnnotationKind, FreezeState, PageIndex, ReadingAnchor, ViewportId, ZoomSpec,
@@ -16,14 +18,15 @@ use pinleaf_core::{
 use pinleaf_engine::filter_toc;
 
 use crate::actions::{
-    APP_CONTEXT, COMMAND_POPUP_CONTEXT, CycleColorMode, NextSearchMatch, OVERLAY_POPUP_CONTEXT,
-    OpenDemo, OpenExtensionsPopup, OpenFile, OpenGlobalHighlightsPopup, OpenRecentPopup,
-    OpenSearch, PrevSearchMatch, RedoAnnot, SEARCH_BAR_CONTEXT, SavePdf, SavePdfAs,
-    ToggleAutoReload, ToggleCommandPopup, TogglePresentationMode, ToggleSidebar,
-    ToggleSmartDarkMode, ToggleTocPopup, UndoAnnot,
+    APP_CONTEXT, COMMAND_POPUP_CONTEXT, CycleColorMode, GoToPage, NextSearchMatch,
+    OVERLAY_POPUP_CONTEXT, OpenDemo, OpenExtensionsPopup, OpenFile, OpenGlobalHighlightsPopup,
+    OpenRecentPopup, OpenSearch, PrevSearchMatch, RedoAnnot, SEARCH_BAR_CONTEXT, SavePdf,
+    SavePdfAs, ShowAbout, ToggleAutoReload, ToggleCommandPopup, TogglePresentationMode,
+    ToggleSidebar, ToggleSmartDarkMode, ToggleThumbnailGrid, ToggleThumbnails, ToggleTocPopup,
+    UndoAnnot,
 };
 use crate::app_state::{AppRegistry, navigate_viewport_globally, sync_portal_followers};
-use crate::command_popup::{CommandEntry, CommandId, filter_commands};
+use crate::command_popup::{CommandEntry, CommandId, filter_commands, parse_page_jump_query};
 use crate::external::run_shell_extension_blocking;
 use crate::library::{GlobalHighlightHit, IndexedHighlight, matches_highlight};
 use crate::session::{ColorMode, DocumentSession};
@@ -226,12 +229,35 @@ struct LibraryRowItem {
     extension_cmd: Option<String>,
 }
 
+#[derive(Clone)]
+struct ThumbPageMeta {
+    page: PageIndex,
+    norm_w: f32,
+    norm_h: f32,
+    is_active: bool,
+    frozen_trail_num: Option<usize>,
+    annot_count: usize,
+    portal_count: usize,
+}
+
 pub struct WindowWorkspace {
     session: Entity<DocumentSession>,
     root: SplitNode,
     focused_viewport: ViewportId,
     sidebar_open: bool,
     sidebar_category_filter: Option<char>,
+    thumbnails_open: bool,
+    thumbs_scroll_handle: UniformListScrollHandle,
+    thumbnail_grid_open: bool,
+    thumbnail_grid_selected: usize,
+    thumbnail_grid_scroll_handle: UniformListScrollHandle,
+    thumbnail_grid_focus_handle: FocusHandle,
+    goto_page_open: bool,
+    goto_page_query: String,
+    goto_page_focus_handle: FocusHandle,
+    brand_menu_open: bool,
+    about_popup_open: bool,
+    about_focus_handle: FocusHandle,
     presentation_mode: bool,
     pre_presentation_zoom: Option<ZoomSpec>,
     command_popup_open: bool,
@@ -255,6 +281,8 @@ pub struct WindowWorkspace {
     pending_focus: Option<FocusHandle>,
     pending_close_window: bool,
     last_window_title: String,
+    last_seen_status: Option<(String, bool)>,
+    status_toast_epoch: u64,
 }
 
 impl WindowWorkspace {
@@ -314,15 +342,27 @@ impl WindowWorkspace {
         let mut subscriptions = HashMap::new();
         subscriptions.insert(vp_id, sub);
 
-        let _session_obs = cx.observe(&session, |_, _, cx| cx.notify());
+        let _session_obs = Self::observe_session(&session, cx);
         session.update(cx, |s, cx| s.trigger_background_text_index(cx));
 
-        Self {
+        let mut ws = Self {
             session,
             root: SplitNode::Leaf { viewport },
             focused_viewport: vp_id,
             sidebar_open: false,
             sidebar_category_filter: None,
+            thumbnails_open: false,
+            thumbs_scroll_handle: UniformListScrollHandle::new(),
+            thumbnail_grid_open: false,
+            thumbnail_grid_selected: 0,
+            thumbnail_grid_scroll_handle: UniformListScrollHandle::new(),
+            thumbnail_grid_focus_handle: cx.focus_handle(),
+            goto_page_open: false,
+            goto_page_query: String::new(),
+            goto_page_focus_handle: cx.focus_handle(),
+            brand_menu_open: false,
+            about_popup_open: false,
+            about_focus_handle: cx.focus_handle(),
             presentation_mode: false,
             pre_presentation_zoom: None,
             command_popup_open: false,
@@ -346,6 +386,48 @@ impl WindowWorkspace {
             pending_focus: Some(fh),
             pending_close_window: false,
             last_window_title: String::new(),
+            last_seen_status: None,
+            status_toast_epoch: 0,
+        };
+        ws.sync_status_toast_timer(cx);
+        ws
+    }
+
+    fn observe_session(
+        session: &Entity<DocumentSession>,
+        cx: &mut Context<Self>,
+    ) -> Subscription {
+        cx.observe(session, |this, _, cx| {
+            this.sync_status_toast_timer(cx);
+            cx.notify();
+        })
+    }
+
+    fn sync_status_toast_timer(&mut self, cx: &mut Context<Self>) {
+        let current = self.session.read(cx).status_message.clone();
+        if current == self.last_seen_status {
+            return;
+        }
+        self.last_seen_status = current.clone();
+        self.status_toast_epoch = self.status_toast_epoch.wrapping_add(1);
+        if let Some((_, is_err)) = current {
+            let epoch = self.status_toast_epoch;
+            let delay_ms = if is_err { 4500 } else { 3000 };
+            cx.spawn(async move |this, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(delay_ms))
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    if this.status_toast_epoch == epoch {
+                        this.last_seen_status = None;
+                        this.session.update(cx, |s, cx| {
+                            s.status_message = None;
+                            cx.notify();
+                        });
+                    }
+                });
+            })
+            .detach();
         }
     }
 
@@ -394,6 +476,10 @@ impl WindowWorkspace {
                 page,
                 focal_y,
             } => {
+                if ws.thumbnails_open && id == ws.focused_viewport {
+                    ws.thumbs_scroll_handle
+                        .scroll_to_item(page.as_usize(), ScrollStrategy::Nearest);
+                }
                 let sess = ws.session.clone();
                 cx.spawn(async move |_, cx| {
                     cx.update(|cx| {
@@ -407,6 +493,10 @@ impl WindowWorkspace {
             }
             ViewportEvent::RequestTogglePortalFollower(id) => {
                 ws.toggle_portal_follower(id, cx);
+            }
+            ViewportEvent::RequestGoToPage(id) => {
+                ws.focused_viewport = id;
+                ws.open_goto_page_popup_deferred(cx);
             }
         })
     }
@@ -735,6 +825,10 @@ impl WindowWorkspace {
     }
 
     fn open_command_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.toc_popup_open = false;
+        self.library_modal = None;
+        self.goto_page_open = false;
+        self.thumbnail_grid_open = false;
         self.command_popup_open = true;
         self.command_query.clear();
         self.selected_command_idx = 0;
@@ -746,8 +840,7 @@ impl WindowWorkspace {
         self.command_popup_open = false;
         self.command_query.clear();
         self.selected_command_idx = 0;
-        let fh = self.active_viewport_entity(cx).read(cx).focus_handle().clone();
-        window.focus(&fh, cx);
+        self.restore_viewport_focus(window, cx);
         cx.notify();
     }
 
@@ -756,6 +849,137 @@ impl WindowWorkspace {
             self.close_command_popup(window, cx);
         } else {
             self.open_command_popup(window, cx);
+        }
+    }
+
+    fn restore_viewport_focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let fh = self.active_viewport_entity(cx).read(cx).focus_handle().clone();
+        window.focus(&fh, cx);
+    }
+
+    fn jump_to_page_from_ui(&mut self, page: PageIndex, split_new: bool, cx: &mut Context<Self>) {
+        let focused_id = self.focused_viewport;
+        if split_new {
+            if let Some(child) = self.freeze_and_split(focused_id, Axis::Horizontal, cx) {
+                child.update(cx, |vp, cx| {
+                    vp.jump_to_page_offset_recorded(page, 0.0, cx);
+                });
+            }
+        } else {
+            self.navigate_focused_or_smart_route(page, 0.0, cx);
+        }
+        if self.thumbnails_open {
+            self.thumbs_scroll_handle
+                .scroll_to_item(page.as_usize(), ScrollStrategy::Nearest);
+        }
+        cx.notify();
+    }
+
+    fn toggle_thumbnails(&mut self, cx: &mut Context<Self>) {
+        self.thumbnails_open = !self.thumbnails_open;
+        if self.thumbnails_open {
+            let active_pg = self.active_viewport_entity(cx).read(cx).anchor.page.as_usize();
+            self.thumbs_scroll_handle
+                .scroll_to_item(active_pg, ScrollStrategy::Center);
+        }
+        cx.notify();
+    }
+
+    fn open_thumbnail_grid(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.command_popup_open = false;
+        self.toc_popup_open = false;
+        self.library_modal = None;
+        self.goto_page_open = false;
+        self.thumbnail_grid_open = true;
+        let active_pg = self.active_viewport_entity(cx).read(cx).anchor.page.as_usize();
+        let count = self.session.read(cx).page_count();
+        self.thumbnail_grid_selected = if count == 0 {
+            0
+        } else {
+            active_pg.min(count - 1)
+        };
+        self.thumbnail_grid_scroll_handle
+            .scroll_to_item(self.thumbnail_grid_selected / 4, ScrollStrategy::Center);
+        window.focus(&self.thumbnail_grid_focus_handle, cx);
+        cx.notify();
+    }
+
+    fn close_thumbnail_grid(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.thumbnail_grid_open = false;
+        self.restore_viewport_focus(window, cx);
+        cx.notify();
+    }
+
+    fn toggle_thumbnail_grid(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.thumbnail_grid_open {
+            self.close_thumbnail_grid(window, cx);
+        } else {
+            self.open_thumbnail_grid(window, cx);
+        }
+    }
+
+    fn open_goto_page_popup_deferred(&mut self, cx: &mut Context<Self>) {
+        self.command_popup_open = false;
+        self.toc_popup_open = false;
+        self.library_modal = None;
+        self.thumbnail_grid_open = false;
+        self.goto_page_open = true;
+        self.goto_page_query.clear();
+        self.pending_focus = Some(self.goto_page_focus_handle.clone());
+        cx.notify();
+    }
+
+    fn open_goto_page_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_goto_page_popup_deferred(cx);
+        self.pending_focus = None;
+        window.focus(&self.goto_page_focus_handle, cx);
+    }
+
+    fn close_goto_page_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.goto_page_open = false;
+        self.goto_page_query.clear();
+        self.restore_viewport_focus(window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn open_about_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.brand_menu_open = false;
+        self.command_popup_open = false;
+        self.toc_popup_open = false;
+        self.goto_page_open = false;
+        self.thumbnail_grid_open = false;
+        self.library_modal = None;
+        self.about_popup_open = true;
+        window.focus(&self.about_focus_handle, cx);
+        cx.notify();
+    }
+
+    fn close_about_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.about_popup_open = false;
+        self.restore_viewport_focus(window, cx);
+        cx.notify();
+    }
+
+    fn toggle_brand_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.brand_menu_open = !self.brand_menu_open;
+        if self.brand_menu_open {
+            self.about_popup_open = false;
+            self.command_popup_open = false;
+            self.toc_popup_open = false;
+            self.goto_page_open = false;
+            self.thumbnail_grid_open = false;
+            self.library_modal = None;
+        } else {
+            self.restore_viewport_focus(window, cx);
+        }
+        cx.notify();
+    }
+
+    fn close_brand_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.brand_menu_open {
+            self.brand_menu_open = false;
+            self.restore_viewport_focus(window, cx);
+            cx.notify();
         }
     }
 
@@ -889,6 +1113,8 @@ impl WindowWorkspace {
             CommandId::RedoAnnot => self.session.update(cx, |s, cx| s.redo(cx)),
             CommandId::NextPage => vp.update(cx, |vp, cx| vp.next_page(cx)),
             CommandId::PrevPage => vp.update(cx, |vp, cx| vp.prev_page(cx)),
+            CommandId::ScrollScreenDown => vp.update(cx, |vp, cx| vp.scroll_screen_down(cx)),
+            CommandId::ScrollScreenUp => vp.update(cx, |vp, cx| vp.scroll_screen_up(cx)),
             CommandId::JumpBack => vp.update(cx, |vp, cx| vp.go_back(cx)),
             CommandId::JumpForward => vp.update(cx, |vp, cx| vp.go_forward(cx)),
             CommandId::FirstPage => vp.update(cx, |vp, cx| vp.go_first_page(cx)),
@@ -897,6 +1123,9 @@ impl WindowWorkspace {
             CommandId::NextSearchMatch => self.step_search(1, cx),
             CommandId::PrevSearchMatch => self.step_search(-1, cx),
             CommandId::ToggleTocPopup => self.toggle_toc_popup(window, cx),
+            CommandId::GoToPage => self.open_goto_page_popup(window, cx),
+            CommandId::ToggleThumbnails => self.toggle_thumbnails(cx),
+            CommandId::ToggleThumbnailGrid => self.toggle_thumbnail_grid(window, cx),
             CommandId::BeginSetMark => vp.update(cx, |vp, cx| vp.begin_set_mark(cx)),
             CommandId::BeginJumpMark => vp.update(cx, |vp, cx| vp.begin_jump_mark(cx)),
             CommandId::ZoomIn => vp.update(cx, |vp, cx| vp.zoom_in(cx)),
@@ -948,6 +1177,7 @@ impl WindowWorkspace {
             CommandId::OpenDemo => self.open_demo_session(cx),
             CommandId::SavePdf => self.trigger_save(false, cx),
             CommandId::SavePdfAs => self.trigger_save(true, cx),
+            CommandId::ShowAbout => self.open_about_popup(window, cx),
             CommandId::QuitApp => cx.quit(),
             CommandId::CloseCommandPopup => {}
         }
@@ -977,16 +1207,19 @@ impl WindowWorkspace {
             return;
         }
 
+        let page_count = self.session.read(cx).page_count();
+        let page_jump = parse_page_jump_query(&self.command_query, page_count);
         let matches = filter_commands(&self.command_query);
         let match_len = matches.len();
+        let total_rows = match_len + usize::from(page_jump.is_some());
 
         if ks.key == "down"
             || (ks.modifiers.control && ks.key == "n")
             || (ks.key == "tab" && !ks.modifiers.shift)
         {
-            if match_len > 0 {
-                let current = self.selected_command_idx.min(match_len - 1);
-                self.selected_command_idx = (current + 1) % match_len;
+            if total_rows > 0 {
+                let current = self.selected_command_idx.min(total_rows - 1);
+                self.selected_command_idx = (current + 1) % total_rows;
                 cx.notify();
             }
             return;
@@ -996,15 +1229,26 @@ impl WindowWorkspace {
             || (ks.modifiers.control && ks.key == "p")
             || (ks.key == "tab" && ks.modifiers.shift)
         {
-            if match_len > 0 {
-                let current = self.selected_command_idx.min(match_len - 1);
-                self.selected_command_idx = (current + match_len - 1) % match_len;
+            if total_rows > 0 {
+                let current = self.selected_command_idx.min(total_rows - 1);
+                self.selected_command_idx = (current + total_rows - 1) % total_rows;
                 cx.notify();
             }
             return;
         }
 
         if ks.key == "enter" {
+            if let Some(target_page_1based) = page_jump {
+                let idx = self.selected_command_idx.min(total_rows.saturating_sub(1));
+                if idx == 0 || match_len == 0 {
+                    self.close_command_popup(window, cx);
+                    self.jump_to_page_from_ui(PageIndex(target_page_1based - 1), false, cx);
+                    return;
+                }
+                let cmd_id = matches[idx - 1].id;
+                self.execute_command(cmd_id, window, cx);
+                return;
+            }
             if match_len > 0 {
                 let idx = self.selected_command_idx.min(match_len - 1);
                 let cmd_id = matches[idx].id;
@@ -1458,8 +1702,10 @@ impl WindowWorkspace {
         for vp in all_vps {
             vp.update(cx, |vp, cx| vp.set_session(new_session.clone(), cx));
         }
-        self._session_obs = cx.observe(&new_session, |_, _, cx| cx.notify());
+        self._session_obs = Self::observe_session(&new_session, cx);
         self.session = new_session;
+        self.last_seen_status = None;
+        self.sync_status_toast_timer(cx);
         cx.notify();
     }
 
@@ -1556,22 +1802,17 @@ impl WindowWorkspace {
         let can_undo = session.annotations.can_undo();
         let can_redo = session.annotations.can_redo();
         let ann_count = session.annotations.all_sorted().len();
-        let title = if dirty {
-            format!("{} *", session.title)
-        } else {
-            session.title.clone()
-        };
-        let status = session.status_message.clone();
         let color_mode = session.color_mode;
         let app_icon = cx.global::<AppRegistry>().app_icon.clone();
 
         div()
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
-            .gap_2()
-            .px_3()
-            .py_1p5()
+            .gap_1p5()
+            .px_2p5()
+            .py_1()
             .bg(rgb(0x18181b))
             .text_color(rgb(0xf4f4f5))
             .text_xs()
@@ -1580,82 +1821,38 @@ impl WindowWorkspace {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
-                    .gap_2()
+                    .gap_1p5()
                     .child(
                         div()
+                            .id("pinleaf-brand-btn")
                             .flex()
                             .items_center()
-                            .gap_1p5()
+                            .gap_1()
                             .px_2()
                             .py_0p5()
                             .rounded_sm()
-                            .bg(rgb(0x1e3a8a))
+                            .cursor_pointer()
+                            .bg(if self.brand_menu_open {
+                                rgb(0x2563eb)
+                            } else {
+                                rgb(0x1e3a8a)
+                            })
+                            .hover(|s| s.bg(rgb(0x1d4ed8)))
                             .text_color(rgb(0xe0f2fe))
                             .font_weight(FontWeight::BOLD)
-                            .child(img(app_icon).size(px(18.)))
-                            .child("Pinleaf"),
+                            .child(img(app_icon).size(px(16.)))
+                            .child("Pinleaf")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_brand_menu(window, cx);
+                            })),
                     )
                     .child(toolbar_btn(
                         "open-pdf",
-                        "Open PDF",
+                        "Open",
                         false,
                         cx.listener(|this, _, _, cx| this.prompt_open_file(cx)),
-                    ))
-                    .child(toolbar_btn(
-                        "open-demo",
-                        "Demo Paper",
-                        false,
-                        cx.listener(|this, _, _, cx| this.open_demo_session(cx)),
-                    ))
-                    .child(
-                        div()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(if dirty { rgb(0xfbbf24) } else { rgb(0xf4f4f5) })
-                            .child(title),
-                    )
-                    .children(status.map(|(msg, is_err)| {
-                        div()
-                            .px_2()
-                            .py_0p5()
-                            .rounded_sm()
-                            .bg(if is_err { rgb(0x7f1d1d) } else { rgb(0x14532d) })
-                            .text_color(rgb(0xffffff))
-                            .child(msg)
-                    })),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1p5()
-                    .child(toolbar_btn(
-                        "undo-btn",
-                        if can_undo { "Undo" } else { "Undo" },
-                        false,
-                        cx.listener(|this, _, _, cx| {
-                            this.session.update(cx, |s, cx| s.undo(cx));
-                        }),
-                    ))
-                    .child(toolbar_btn(
-                        "redo-btn",
-                        if can_redo { "Redo" } else { "Redo" },
-                        false,
-                        cx.listener(|this, _, _, cx| {
-                            this.session.update(cx, |s, cx| s.redo(cx));
-                        }),
-                    ))
-                    .child(toolbar_btn(
-                        "save-btn",
-                        if dirty { "Save PDF *" } else { "Save PDF" },
-                        dirty,
-                        cx.listener(|this, _, _, cx| this.trigger_save(false, cx)),
-                    ))
-                    .child(toolbar_btn(
-                        "save-as-btn",
-                        "Save As...",
-                        false,
-                        cx.listener(|this, _, _, cx| this.trigger_save(true, cx)),
                     ))
                     .child(toolbar_btn(
                         "recent-btn",
@@ -1664,6 +1861,63 @@ impl WindowWorkspace {
                         cx.listener(|this, _, window, cx| {
                             this.toggle_library_modal(LibraryModalKind::RecentDocs, window, cx);
                         }),
+                    ))
+                    .when(can_undo, |row| {
+                        row.child(toolbar_btn(
+                            "undo-btn",
+                            "Undo",
+                            false,
+                            cx.listener(|this, _, _, cx| {
+                                this.session.update(cx, |s, cx| s.undo(cx));
+                            }),
+                        ))
+                    })
+                    .when(can_redo, |row| {
+                        row.child(toolbar_btn(
+                            "redo-btn",
+                            "Redo",
+                            false,
+                            cx.listener(|this, _, _, cx| {
+                                this.session.update(cx, |s, cx| s.redo(cx));
+                            }),
+                        ))
+                    })
+                    .child(
+                        div()
+                            .id("save-btn")
+                            .px_2()
+                            .py_0p5()
+                            .rounded_sm()
+                            .cursor_pointer()
+                            .bg(if dirty {
+                                rgb(0xd97706)
+                            } else {
+                                rgb(0x27272a)
+                            })
+                            .text_color(rgb(0xffffff))
+                            .when(dirty, |btn| btn.font_weight(FontWeight::SEMIBOLD))
+                            .hover(|s| {
+                                s.bg(if dirty {
+                                    rgb(0xb45309)
+                                } else {
+                                    rgb(0x3f3f46)
+                                })
+                            })
+                            .child(if dirty { "Save *" } else { "Save" })
+                            .on_click(cx.listener(|this, _, _, cx| this.trigger_save(false, cx))),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_1p5()
+                    .child(toolbar_btn(
+                        "thumbs-btn",
+                        "Pages",
+                        self.thumbnails_open,
+                        cx.listener(|this, _, _, cx| this.toggle_thumbnails(cx)),
                     ))
                     .child(toolbar_btn(
                         "toc-btn",
@@ -1688,7 +1942,7 @@ impl WindowWorkspace {
                     ))
                     .child(toolbar_btn(
                         "theme-btn",
-                        format!("Theme: {}", color_mode.label()),
+                        color_mode.label(),
                         color_mode != ColorMode::Light,
                         cx.listener(|this, _, _, cx| {
                             this.session.update(cx, |s, cx| s.cycle_color_mode(cx));
@@ -1696,10 +1950,368 @@ impl WindowWorkspace {
                     ))
                     .child(toolbar_btn(
                         "commands-btn",
-                        "? Commands",
+                        "/ Cmds",
                         self.command_popup_open,
                         cx.listener(|this, _, window, cx| this.toggle_command_popup(window, cx)),
                     )),
+            )
+    }
+
+    fn render_status_toast(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (msg, is_err) = self.session.read(cx).status_message.clone()?;
+        Some(
+            div()
+                .id("status-toast")
+                .absolute()
+                .bottom(px(14.))
+                .right(px(14.))
+                .max_w(px(460.))
+                .flex()
+                .items_center()
+                .gap_2()
+                .px_3()
+                .py_1p5()
+                .rounded_md()
+                .shadow_lg()
+                .border_1()
+                .bg(if is_err { rgb(0x7f1d1d) } else { rgb(0x14532d) })
+                .border_color(if is_err { rgb(0xef4444) } else { rgb(0x22c55e) })
+                .text_xs()
+                .text_color(rgb(0xffffff))
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.status_toast_epoch = this.status_toast_epoch.wrapping_add(1);
+                    this.last_seen_status = None;
+                    this.session.update(cx, |s, cx| {
+                        s.status_message = None;
+                        cx.notify();
+                    });
+                }))
+                .child(div().flex_1().min_w_0().truncate().child(msg))
+                .child(div().text_color(rgb(0xd4d4d8)).child("x"))
+                .into_any_element(),
+        )
+    }
+
+    fn render_brand_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let ver_badge = format!("v{}", env!("CARGO_PKG_VERSION"));
+        let menu_row = |id: &'static str,
+                        label: &'static str,
+                        hint: &str,
+                        on_click: Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static>| {
+            let mut row = div()
+                .id(id)
+                .w_full()
+                .px_3()
+                .py_1p5()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .cursor_pointer()
+                .hover(|s| s.bg(rgb(0x27272a)))
+                .child(div().text_color(rgb(0xf4f4f5)).child(label))
+                .on_click(move |ev, window, app| on_click(ev, window, app));
+            if !hint.is_empty() {
+                row = row.child(
+                    div()
+                        .text_color(rgb(0xa1a1aa))
+                        .child(hint.to_string()),
+                );
+            }
+            row
+        };
+        let ws_about = cx.entity();
+        let ws_demo = cx.entity();
+        let ws_save_as = cx.entity();
+        let ws_cmds = cx.entity();
+
+        div()
+            .id("brand-menu-backdrop")
+            .absolute()
+            .top(px(0.))
+            .left(px(0.))
+            .size_full()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    this.close_brand_menu(window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .child(
+                div()
+                    .id("brand-menu-card")
+                    .key_context(OVERLAY_POPUP_CONTEXT)
+                    .absolute()
+                    .top(px(34.))
+                    .left(px(10.))
+                    .w(px(236.))
+                    .py_1()
+                    .rounded_md()
+                    .bg(rgb(0x18181b))
+                    .border_1()
+                    .border_color(rgb(0x3f3f46))
+                    .shadow_lg()
+                    .text_xs()
+                    .text_color(rgb(0xf4f4f5))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(menu_row(
+                        "brand-menu-about",
+                        "About Pinleaf",
+                        &ver_badge,
+                        Box::new(move |_, window, app| {
+                            ws_about.update(app, |this, cx| this.open_about_popup(window, cx));
+                        }),
+                    ))
+                    .child(div().h(px(1.)).my_1().bg(rgb(0x27272a)))
+                    .child(menu_row(
+                        "brand-menu-demo",
+                        "Open Built-in Demo",
+                        "",
+                        Box::new(move |_, window, app| {
+                            ws_demo.update(app, |this, cx| {
+                                this.close_brand_menu(window, cx);
+                                this.open_demo_session(cx);
+                            });
+                        }),
+                    ))
+                    .child(menu_row(
+                        "brand-menu-save-as",
+                        "Save PDF As...",
+                        "",
+                        Box::new(move |_, window, app| {
+                            ws_save_as.update(app, |this, cx| {
+                                this.close_brand_menu(window, cx);
+                                this.trigger_save(true, cx);
+                            });
+                        }),
+                    ))
+                    .child(menu_row(
+                        "brand-menu-cmds",
+                        "Commands & Shortcuts",
+                        "/",
+                        Box::new(move |_, window, app| {
+                            ws_cmds.update(app, |this, cx| {
+                                this.brand_menu_open = false;
+                                this.toggle_command_popup(window, cx);
+                            });
+                        }),
+                    ))
+                    .child(div().h(px(1.)).my_1().bg(rgb(0x27272a)))
+                    .child(menu_row(
+                        "brand-menu-quit",
+                        "Quit Pinleaf",
+                        "Cmd+Q",
+                        Box::new(|_, _, app| app.quit()),
+                    )),
+            )
+    }
+
+    fn render_about_popup(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let app_icon = cx.global::<AppRegistry>().app_icon.clone();
+        let version_badge = format!(
+            "Version {} ({}-{})",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::ARCH,
+            std::env::consts::OS
+        );
+        let clipboard_version = format!(
+            "Pinleaf v{} ({}-{})",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::ARCH,
+            std::env::consts::OS
+        );
+
+        div()
+            .id("about-popup-backdrop")
+            .absolute()
+            .top(px(0.))
+            .left(px(0.))
+            .size_full()
+            .bg(rgba(0x09090b88))
+            .flex()
+            .items_center()
+            .justify_center()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    this.close_about_popup(window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .child(
+                div()
+                    .id("about-popup-card")
+                    .key_context(OVERLAY_POPUP_CONTEXT)
+                    .track_focus(&self.about_focus_handle)
+                    .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        if matches!(event.keystroke.key.as_str(), "escape" | "enter") {
+                            this.close_about_popup(window, cx);
+                        }
+                    }))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .w(px(380.))
+                    .flex()
+                    .flex_col()
+                    .rounded_md()
+                    .bg(rgb(0x18181b))
+                    .text_color(rgb(0xf4f4f5))
+                    .border_1()
+                    .border_color(rgb(0x3f3f46))
+                    .shadow_lg()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .px_3p5()
+                            .py_2()
+                            .border_b_1()
+                            .border_color(rgb(0x27272a))
+                            .text_xs()
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(rgb(0xffffff))
+                                    .child("About Pinleaf"),
+                            )
+                            .child(
+                                div()
+                                    .id("about-close-btn")
+                                    .px_2()
+                                    .py_0p5()
+                                    .rounded_sm()
+                                    .bg(rgb(0x27272a))
+                                    .hover(|s| s.bg(rgb(0x3f3f46)))
+                                    .cursor_pointer()
+                                    .text_color(rgb(0xe4e4e7))
+                                    .child("Close [Esc]")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.close_about_popup(window, cx);
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap_2()
+                            .px_5()
+                            .py_5()
+                            .child(img(app_icon).size(px(56.)))
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(rgb(0xffffff))
+                                    .child("Pinleaf"),
+                            )
+                            .child(
+                                div()
+                                    .px_2p5()
+                                    .py_0p5()
+                                    .rounded_sm()
+                                    .bg(rgb(0x1e3a8a))
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xe0f2fe))
+                                    .child(version_badge),
+                            )
+                            .child(
+                                div()
+                                    .pt_1()
+                                    .text_xs()
+                                    .text_color(rgb(0xd4d4d8))
+                                    .child("Freeze-and-branch multi-view academic PDF reader"),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(0xa1a1aa))
+                                    .child("Pure Rust + Metal GPU  |  gpui-ce  |  hayro  |  lopdf"),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(0x71717a))
+                                    .child("MIT License"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_end()
+                            .gap_2()
+                            .px_4()
+                            .py_2p5()
+                            .border_t_1()
+                            .border_color(rgb(0x27272a))
+                            .text_xs()
+                            .child(
+                                div()
+                                    .id("about-copy-btn")
+                                    .px_2p5()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(rgb(0x27272a))
+                                    .hover(|s| s.bg(rgb(0x3f3f46)))
+                                    .cursor_pointer()
+                                    .text_color(rgb(0xf4f4f5))
+                                    .child("Copy Version")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        cx.write_to_clipboard(ClipboardItem::new_string(
+                                            clipboard_version.clone(),
+                                        ));
+                                        this.session.update(cx, |s, cx| {
+                                            s.status_message = Some((
+                                                "Copied Pinleaf version to clipboard".to_string(),
+                                                false,
+                                            ));
+                                            cx.notify();
+                                        });
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("about-github-btn")
+                                    .px_2p5()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(rgb(0x27272a))
+                                    .hover(|s| s.bg(rgb(0x3f3f46)))
+                                    .cursor_pointer()
+                                    .text_color(rgb(0xf4f4f5))
+                                    .child("GitHub")
+                                    .on_click(|_, _, _| {
+                                        let _ = crate::external::open_external_url(
+                                            "https://github.com/zhanxw/pinleaf",
+                                        );
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .id("about-ok-btn")
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(rgb(0x2563eb))
+                                    .hover(|s| s.bg(rgb(0x1d4ed8)))
+                                    .cursor_pointer()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xffffff))
+                                    .child("OK")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.close_about_popup(window, cx);
+                                    })),
+                            ),
+                    ),
             )
     }
 
@@ -1937,6 +2549,629 @@ impl WindowWorkspace {
         });
     }
 
+    fn collect_thumb_page_metas(&self, cx: &App) -> Rc<Vec<ThumbPageMeta>> {
+        let sess = self.session.read(cx);
+        let count = sess.page_count();
+        let active_page = self.active_viewport_entity(cx).read(cx).anchor.page;
+
+        let mut frozen_pages: HashMap<usize, usize> = HashMap::new();
+        let mut viewports = Vec::new();
+        self.root.all_viewports(&mut viewports);
+        let reg = cx.global::<AppRegistry>();
+        for vp_ent in viewports {
+            let vp = vp_ent.read(cx);
+            if vp.freeze_state.is_frozen() {
+                let (trail_num, _) = reg.trail_info(vp.id);
+                frozen_pages
+                    .entry(vp.anchor.page.as_usize())
+                    .or_insert(trail_num as usize);
+            }
+        }
+
+        let mut annot_counts = vec![0usize; count];
+        for ann in sess.annotations.all_sorted() {
+            if let Some(slot) = annot_counts.get_mut(ann.page.as_usize()) {
+                *slot += 1;
+            }
+        }
+        let mut portal_counts = vec![0usize; count];
+        for portal in &sess.portals {
+            if let Some(slot) = portal_counts.get_mut(portal.src_page.as_usize()) {
+                *slot += 1;
+            }
+        }
+
+        let metas = sess
+            .page_metas
+            .iter()
+            .enumerate()
+            .map(|(i, pm)| ThumbPageMeta {
+                page: PageIndex(i as u32),
+                norm_w: pm.norm_width,
+                norm_h: pm.norm_height,
+                is_active: active_page.as_usize() == i,
+                frozen_trail_num: frozen_pages.get(&i).copied(),
+                annot_count: annot_counts[i],
+                portal_count: portal_counts[i],
+            })
+            .collect();
+        Rc::new(metas)
+    }
+
+    fn render_thumb_card_inner(
+        meta: &ThumbPageMeta,
+        thumb_img: Option<Arc<RenderImage>>,
+        max_w: f32,
+        max_h: f32,
+        is_selected: bool,
+    ) -> gpui::Div {
+        let scale = (max_w / meta.norm_w.max(1.0)).min(max_h / meta.norm_h.max(1.0));
+        let card_w = (meta.norm_w * scale).round().max(48.0);
+        let card_h = (meta.norm_h * scale).round().max(48.0);
+        let highlighted = is_selected || meta.is_active;
+
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap_1()
+            .child(
+                div()
+                    .relative()
+                    .w(px(max_w))
+                    .h(px(max_h))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .relative()
+                            .w(px(card_w))
+                            .h(px(card_h))
+                            .rounded_sm()
+                            .overflow_hidden()
+                            .bg(rgb(0xffffff))
+                            .border_2()
+                            .border_color(if highlighted {
+                                rgb(0x2563eb)
+                            } else if meta.frozen_trail_num.is_some() {
+                                rgb(0xf59e0b)
+                            } else {
+                                rgb(0xd4d4d8)
+                            })
+                            .shadow_xs()
+                            .child(match thumb_img {
+                                Some(t) => img(t).size_full().into_any_element(),
+                                None => div()
+                                    .size_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_xs()
+                                    .text_color(rgb(0xa1a1aa))
+                                    .child(format!("p.{}", meta.page.one_based()))
+                                    .into_any_element(),
+                            })
+                            .when_some(meta.frozen_trail_num, |card, trail_num| {
+                                card.child(
+                                    div()
+                                        .absolute()
+                                        .top(px(3.))
+                                        .right(px(3.))
+                                        .px_1()
+                                        .rounded_sm()
+                                        .bg(rgb(0xf59e0b))
+                                        .text_xs()
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_color(rgb(0x18181b))
+                                        .child(format!("#{trail_num} LOCK")),
+                                )
+                            }),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .text_xs()
+                    .font_weight(if highlighted {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::MEDIUM
+                    })
+                    .text_color(if highlighted {
+                        rgb(0x1d4ed8)
+                    } else {
+                        rgb(0x52525b)
+                    })
+                    .child(format!("{}", meta.page.one_based()))
+                    .when(meta.annot_count > 0, |row| {
+                        row.child(div().size(px(6.)).rounded_full().bg(rgb(0x3b82f6)))
+                    })
+                    .when(meta.portal_count > 0, |row| {
+                        row.child(div().size(px(6.)).rounded_full().bg(rgb(0x10b981)))
+                    }),
+            )
+    }
+
+    fn render_thumbnails_strip(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let metas = self.collect_thumb_page_metas(cx);
+        let page_count = metas.len();
+        let session = self.session.clone();
+        let ws_entity = cx.entity().clone();
+
+        div()
+            .w(px(196.))
+            .h_full()
+            .flex_shrink_0()
+            .flex()
+            .flex_col()
+            .bg(rgb(0xf4f4f5))
+            .border_r_1()
+            .border_color(rgb(0xd4d4d8))
+            .child(
+                div()
+                    .px_2p5()
+                    .py_2()
+                    .border_b_1()
+                    .border_color(rgb(0xe4e4e7))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(0x18181b))
+                            .child(format!("Pages ({page_count})")),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .id("thumbs-open-grid")
+                                    .px_1p5()
+                                    .py_0p5()
+                                    .rounded_sm()
+                                    .cursor_pointer()
+                                    .bg(rgb(0xe4e4e7))
+                                    .hover(|s| s.bg(rgb(0xd4d4d8)))
+                                    .text_xs()
+                                    .text_color(rgb(0x27272a))
+                                    .child("Grid")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.open_thumbnail_grid(window, cx);
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("thumbs-close")
+                                    .px_1p5()
+                                    .py_0p5()
+                                    .rounded_sm()
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(rgb(0xe4e4e7)))
+                                    .text_xs()
+                                    .text_color(rgb(0x52525b))
+                                    .child("×")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.toggle_thumbnails(cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(
+                        uniform_list("thumbnails-strip", page_count, move |range, _window, cx| {
+                            range
+                                .map(|ix| {
+                                    let meta = &metas[ix];
+                                    let thumb_img = session.update(cx, |s, cx| {
+                                        s.get_or_request_thumbnail(meta.page, cx)
+                                    });
+                                    let ws = ws_entity.clone();
+                                    let target_page = meta.page;
+                                    div()
+                                        .id(("thumb-strip-item", ix))
+                                        .w_full()
+                                        .h(px(210.))
+                                        .py_2()
+                                        .px_2()
+                                        .cursor_pointer()
+                                        .bg(if meta.is_active {
+                                            rgba(0x2563eb1a)
+                                        } else {
+                                            rgba(0x00000000)
+                                        })
+                                        .hover(|s| s.bg(rgba(0x2563eb14)))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .on_click(move |ev, window, cx| {
+                                            let split_new = ev.modifiers().platform;
+                                            let _ = ws.update(cx, |this, cx| {
+                                                this.jump_to_page_from_ui(target_page, split_new, cx);
+                                                this.restore_viewport_focus(window, cx);
+                                            });
+                                        })
+                                        .child(Self::render_thumb_card_inner(
+                                            meta,
+                                            thumb_img,
+                                            140.0,
+                                            166.0,
+                                            meta.is_active,
+                                        ))
+                                })
+                                .collect()
+                        })
+                        .track_scroll(&self.thumbs_scroll_handle)
+                        .size_full(),
+                    ),
+            )
+            .child(
+                div()
+                    .px_2p5()
+                    .py_1p5()
+                    .border_t_1()
+                    .border_color(rgb(0xe4e4e7))
+                    .text_xs()
+                    .text_color(rgb(0x71717a))
+                    .child("Click: Jump • ⌘+Click: Split"),
+            )
+    }
+
+    fn handle_thumbnail_grid_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        let ks = &event.keystroke;
+        let count = self.session.read(cx).page_count();
+        if ks.key == "escape" || count == 0 {
+            self.close_thumbnail_grid(window, cx);
+            return;
+        }
+        let last = count - 1;
+        if ks.key == "enter" {
+            let split_new = ks.modifiers.platform;
+            let target = PageIndex(self.thumbnail_grid_selected.min(last) as u32);
+            self.close_thumbnail_grid(window, cx);
+            self.jump_to_page_from_ui(target, split_new, cx);
+            return;
+        }
+        let cur = self.thumbnail_grid_selected.min(last);
+        let next = match ks.key.as_str() {
+            "left" | "h" => Some(cur.saturating_sub(1)),
+            "right" | "l" => Some((cur + 1).min(last)),
+            "up" | "k" => Some(cur.saturating_sub(4)),
+            "down" | "j" => Some((cur + 4).min(last)),
+            "home" => Some(0),
+            "end" => Some(last),
+            "g" => Some(if ks.modifiers.shift { last } else { 0 }),
+            _ => None,
+        };
+        if let Some(new_idx) = next {
+            self.thumbnail_grid_selected = new_idx;
+            self.thumbnail_grid_scroll_handle
+                .scroll_to_item(new_idx / 4, ScrollStrategy::Nearest);
+            cx.notify();
+        }
+    }
+
+    fn render_thumbnail_grid_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let metas = self.collect_thumb_page_metas(cx);
+        let page_count = metas.len();
+        let row_count = page_count.div_ceil(4);
+        let selected = self.thumbnail_grid_selected.min(page_count.saturating_sub(1));
+        let session = self.session.clone();
+        let ws_entity = cx.entity().clone();
+
+        div()
+            .id("thumb-grid-backdrop")
+            .absolute()
+            .top(px(0.))
+            .left(px(0.))
+            .size_full()
+            .bg(rgba(0x09090ba0))
+            .flex()
+            .items_center()
+            .justify_center()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    this.close_thumbnail_grid(window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .child(
+                div()
+                    .id("thumb-grid-card")
+                    .key_context(OVERLAY_POPUP_CONTEXT)
+                    .track_focus(&self.thumbnail_grid_focus_handle)
+                    .on_key_down(cx.listener(Self::handle_thumbnail_grid_key_down))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .w(px(860.))
+                    .h(px(620.))
+                    .flex()
+                    .flex_col()
+                    .rounded_md()
+                    .bg(rgb(0xfafafa))
+                    .border_1()
+                    .border_color(rgb(0xd4d4d8))
+                    .shadow_lg()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .px_4()
+                            .py_2p5()
+                            .bg(rgb(0x18181b))
+                            .text_color(rgb(0xf4f4f5))
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .text_xs()
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(format!("Thumbnail Grid Overview ({page_count} pages)")),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .child(
+                                        div()
+                                            .text_color(rgb(0xa1a1aa))
+                                            .child("Arrows/hjkl Move · Enter Jump · Cmd+Enter Split · Esc Close"),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("thumb-grid-close")
+                                            .px_2()
+                                            .py_0p5()
+                                            .rounded_sm()
+                                            .bg(rgb(0x27272a))
+                                            .cursor_pointer()
+                                            .hover(|s| s.bg(rgb(0x3f3f46)))
+                                            .child("Close")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.close_thumbnail_grid(window, cx);
+                                            })),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .child(
+                                uniform_list(
+                                    "thumbnails-grid",
+                                    row_count,
+                                    move |range, _window, cx| {
+                                        range
+                                            .map(|row_ix| {
+                                                let mut cols = Vec::with_capacity(4);
+                                                for col_ix in 0..4 {
+                                                    let ix = row_ix * 4 + col_ix;
+                                                    if ix < page_count {
+                                                        let meta = &metas[ix];
+                                                        let thumb_img = session.update(cx, |s, cx| {
+                                                            s.get_or_request_thumbnail(meta.page, cx)
+                                                        });
+                                                        let ws = ws_entity.clone();
+                                                        let is_sel = ix == selected;
+                                                        let target_page = meta.page;
+                                                        cols.push(
+                                                            div()
+                                                                .id(("thumb-grid-cell", ix))
+                                                                .flex_1()
+                                                                .h_full()
+                                                                .rounded_sm()
+                                                                .cursor_pointer()
+                                                                .bg(if is_sel {
+                                                                    rgba(0x2563eb1a)
+                                                                } else {
+                                                                    rgba(0x00000000)
+                                                                })
+                                                                .hover(|s| s.bg(rgba(0x2563eb12)))
+                                                                .flex()
+                                                                .items_center()
+                                                                .justify_center()
+                                                                .on_click(move |ev, window, cx| {
+                                                                    let split_new =
+                                                                        ev.modifiers().platform;
+                                                                    let _ = ws.update(cx, |this, cx| {
+                                                                        this.thumbnail_grid_selected =
+                                                                            ix;
+                                                                        this.close_thumbnail_grid(
+                                                                            window, cx,
+                                                                        );
+                                                                        this.jump_to_page_from_ui(
+                                                                            target_page, split_new,
+                                                                            cx,
+                                                                        );
+                                                                    });
+                                                                })
+                                                                .child(Self::render_thumb_card_inner(
+                                                                    meta,
+                                                                    thumb_img,
+                                                                    172.0,
+                                                                    192.0,
+                                                                    is_sel,
+                                                                ))
+                                                                .into_any_element(),
+                                                        );
+                                                    } else {
+                                                        cols.push(
+                                                            div()
+                                                                .flex_1()
+                                                                .h_full()
+                                                                .into_any_element(),
+                                                        );
+                                                    }
+                                                }
+                                                div()
+                                                    .id(("thumb-grid-row", row_ix))
+                                                    .w_full()
+                                                    .h(px(236.))
+                                                    .px_3()
+                                                    .py_1p5()
+                                                    .flex()
+                                                    .flex_row()
+                                                    .gap_3()
+                                                    .children(cols)
+                                            })
+                                            .collect()
+                                    },
+                                )
+                                .track_scroll(&self.thumbnail_grid_scroll_handle)
+                                .size_full(),
+                            ),
+                    ),
+            )
+    }
+
+    fn handle_goto_page_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        let ks = &event.keystroke;
+        if ks.key == "escape" {
+            self.close_goto_page_popup(window, cx);
+            return;
+        }
+        if ks.key == "backspace" {
+            self.goto_page_query.pop();
+            cx.notify();
+            return;
+        }
+        if ks.key == "enter" {
+            let page_count = self.session.read(cx).page_count();
+            if page_count > 0
+                && let Ok(parsed) = self.goto_page_query.trim().parse::<u32>()
+                && parsed >= 1
+            {
+                let clamped = parsed.clamp(1, page_count as u32);
+                let split_new = ks.modifiers.platform;
+                self.close_goto_page_popup(window, cx);
+                self.jump_to_page_from_ui(PageIndex(clamped - 1), split_new, cx);
+            } else {
+                self.close_goto_page_popup(window, cx);
+            }
+            return;
+        }
+        if !ks.modifiers.platform
+            && !ks.modifiers.control
+            && !ks.modifiers.alt
+            && let Some(ch_str) = &ks.key_char
+            && let Some(ch) = ch_str.chars().next()
+            && ch.is_ascii_digit()
+            && (!self.goto_page_query.is_empty() || ch != '0')
+            && self.goto_page_query.len() < 5
+        {
+            self.goto_page_query.push(ch);
+            cx.notify();
+        }
+    }
+
+    fn render_goto_page_popup(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let page_count = self.session.read(cx).page_count();
+        let current_page = self.active_viewport_entity(cx).read(cx).anchor.page.one_based();
+        let display_query = if self.goto_page_query.is_empty() {
+            format!("Page 1–{page_count} (now {current_page})|")
+        } else {
+            format!("{}|", self.goto_page_query)
+        };
+        let is_empty = self.goto_page_query.is_empty();
+
+        div()
+            .id("goto-page-backdrop")
+            .absolute()
+            .top(px(0.))
+            .left(px(0.))
+            .size_full()
+            .bg(rgba(0x09090b77))
+            .flex()
+            .items_start()
+            .justify_center()
+            .pt(px(88.))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    this.close_goto_page_popup(window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .child(
+                div()
+                    .id("goto-page-card")
+                    .key_context(OVERLAY_POPUP_CONTEXT)
+                    .track_focus(&self.goto_page_focus_handle)
+                    .on_key_down(cx.listener(Self::handle_goto_page_key_down))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .w(px(340.))
+                    .p_3()
+                    .rounded_md()
+                    .bg(rgb(0x18181b))
+                    .border_1()
+                    .border_color(rgb(0x3f3f46))
+                    .shadow_lg()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .text_xs()
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(rgb(0xffffff))
+                                    .child("Go to Page"),
+                            )
+                            .child(
+                                div()
+                                    .text_color(rgb(0xa1a1aa))
+                                    .child("Enter Jump · Cmd+Enter Split · Esc"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_2p5()
+                            .py_1p5()
+                            .rounded_sm()
+                            .bg(rgb(0x09090b))
+                            .border_1()
+                            .border_color(rgb(0x2563eb))
+                            .text_sm()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(if is_empty {
+                                rgb(0x71717a)
+                            } else {
+                                rgb(0xffffff)
+                            })
+                            .child(display_query),
+                    ),
+            )
+    }
+
     fn render_split_node(&self, node: &SplitNode, cx: &mut Context<Self>) -> AnyElement {
         match node {
             SplitNode::Leaf { viewport } => div()
@@ -2019,17 +3254,75 @@ impl WindowWorkspace {
     }
 
     fn render_command_popup(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let page_count = self.session.read(cx).page_count();
+        let page_jump = parse_page_jump_query(&self.command_query, page_count);
         let matches = filter_commands(&self.command_query);
         let match_len = matches.len();
-        let selected_idx = if match_len > 0 {
-            Some(self.selected_command_idx.min(match_len - 1))
+        let total_rows = match_len + usize::from(page_jump.is_some());
+        let selected_idx = if total_rows > 0 {
+            Some(self.selected_command_idx.min(total_rows - 1))
         } else {
             None
         };
         let is_unfiltered = self.command_query.trim().is_empty();
 
         let mut list_items: Vec<AnyElement> = Vec::new();
-        if matches.is_empty() {
+        if let Some(target_page_1based) = page_jump {
+            let is_sel = selected_idx == Some(0);
+            list_items.push(
+                div()
+                    .id("cmd-row-page-jump")
+                    .px_2p5()
+                    .py_1p5()
+                    .rounded_sm()
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .bg(if is_sel { rgb(0x1e3a8a) } else { rgb(0x18181b) })
+                    .border_1()
+                    .border_color(if is_sel { rgb(0x3b82f6) } else { rgb(0x27272a) })
+                    .hover(|s| s.bg(rgb(0x1d4ed8)))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.close_command_popup(window, cx);
+                        this.jump_to_page_from_ui(PageIndex(target_page_1based - 1), false, cx);
+                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_0p5()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xffffff))
+                                    .child(format!("Jump to Page {target_page_1based} of {page_count}")),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(0x93c5fd))
+                                    .child("Direct page navigation"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_1p5()
+                            .py_0p5()
+                            .rounded_sm()
+                            .bg(rgb(0x27272a))
+                            .text_xs()
+                            .text_color(rgb(0xe4e4e7))
+                            .child("Enter"),
+                    )
+                    .into_any_element(),
+            );
+        }
+        let cmd_offset = usize::from(page_jump.is_some());
+        if matches.is_empty() && page_jump.is_none() {
             list_items.push(
                 div()
                     .px_3()
@@ -2059,10 +3352,11 @@ impl WindowWorkspace {
                             .into_any_element(),
                     );
                 }
+                let row_idx = idx + cmd_offset;
                 list_items.push(self.render_command_row(
                     idx,
                     entry,
-                    selected_idx == Some(idx),
+                    selected_idx == Some(row_idx),
                     !is_unfiltered,
                     cx,
                 ));
@@ -2143,7 +3437,7 @@ impl WindowWorkspace {
                                             .rounded_sm()
                                             .bg(rgb(0x27272a))
                                             .text_color(rgb(0xa1a1aa))
-                                            .child(format!("{match_len}")),
+                                            .child(format!("{total_rows}")),
                                     ),
                             )
                             .child(
@@ -2154,7 +3448,7 @@ impl WindowWorkspace {
                                     .child(
                                         div()
                                             .text_color(rgb(0xa1a1aa))
-                                            .child("↑↓ Navigate · ↵ Run · Esc Close"),
+                                            .child("Up/Down Navigate · Enter Run · Esc Close"),
                                     )
                                     .child(
                                         div()
@@ -2978,6 +4272,8 @@ impl WindowWorkspace {
                 self.freeze_and_split(vp_id, Axis::Vertical, cx);
             }
             "toggle_portal_follower" => self.toggle_portal_follower(vp_id, cx),
+            "toggle_thumbnails" => self.toggle_thumbnails(cx),
+            "toggle_thumbnail_grid" => self.toggle_thumbnail_grid(window, cx),
             "toggle_presentation" => self.toggle_presentation_mode(window, cx),
             "toggle_autoscroll" => vp.update(cx, |vp, cx| vp.toggle_auto_scroll(cx)),
             "search" => {
@@ -2991,6 +4287,12 @@ impl WindowWorkspace {
                 self.session.update(cx, |s, cx| {
                     s.force_reload_from_disk(cx);
                 });
+            }
+            "about" => {
+                self.brand_menu_open = false;
+                self.about_popup_open = true;
+                self.pending_focus = Some(self.about_focus_handle.clone());
+                cx.notify();
             }
             "quit" => cx.quit(),
             other => return Err(format!("unknown IPC command: {other}")),
@@ -3008,6 +4310,10 @@ impl WindowWorkspace {
             && event.keystroke.key == "escape"
             && !self.command_popup_open
             && !self.toc_popup_open
+            && !self.goto_page_open
+            && !self.thumbnail_grid_open
+            && !self.about_popup_open
+            && !self.brand_menu_open
             && self.library_modal.is_none()
             && !self.search_bar_open
         {
@@ -3016,8 +4322,19 @@ impl WindowWorkspace {
             return;
         }
 
+        if self.brand_menu_open {
+            if event.keystroke.key == "escape" {
+                self.close_brand_menu(window, cx);
+                cx.stop_propagation();
+            }
+            return;
+        }
+
         if self.command_popup_open
             || self.toc_popup_open
+            || self.goto_page_open
+            || self.thumbnail_grid_open
+            || self.about_popup_open
             || self.library_modal.is_some()
             || self.search_bar_open
         {
@@ -3055,7 +4372,15 @@ impl Render for WindowWorkspace {
             window.focus(&fh, cx);
         }
 
-        let desired_title = format!("Pinleaf — {}", self.session.read(cx).title);
+        let (doc_title, doc_dirty) = {
+            let s = self.session.read(cx);
+            (s.title.clone(), s.annotations.is_dirty())
+        };
+        let desired_title = if doc_dirty {
+            format!("Pinleaf — {doc_title} *")
+        } else {
+            format!("Pinleaf — {doc_title}")
+        };
         if self.last_window_title != desired_title {
             self.last_window_title = desired_title.clone();
             window.set_window_title(&desired_title);
@@ -3073,6 +4398,7 @@ impl Render for WindowWorkspace {
             .bg(rgb(0xe4e4e7))
             .on_action(cx.listener(|this, _: &OpenFile, _, cx| this.prompt_open_file(cx)))
             .on_action(cx.listener(|this, _: &OpenDemo, _, cx| this.open_demo_session(cx)))
+            .on_action(cx.listener(|this, _: &ShowAbout, window, cx| this.open_about_popup(window, cx)))
             .on_action(cx.listener(|this, _: &SavePdf, _, cx| this.trigger_save(false, cx)))
             .on_action(cx.listener(|this, _: &SavePdfAs, _, cx| this.trigger_save(true, cx)))
             .on_action(cx.listener(|this, _: &UndoAnnot, _, cx| {
@@ -3099,6 +4425,15 @@ impl Render for WindowWorkspace {
             }))
             .on_action(cx.listener(|this, _: &ToggleTocPopup, window, cx| {
                 this.toggle_toc_popup(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &GoToPage, window, cx| {
+                this.open_goto_page_popup(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleThumbnails, _, cx| {
+                this.toggle_thumbnails(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleThumbnailGrid, window, cx| {
+                this.toggle_thumbnail_grid(window, cx);
             }))
             .on_action(cx.listener(|this, _: &OpenRecentPopup, window, cx| {
                 this.toggle_library_modal(LibraryModalKind::RecentDocs, window, cx);
@@ -3186,15 +4521,38 @@ impl Render for WindowWorkspace {
                     .min_h_0()
                     .flex()
                     .flex_row()
-                    .child(div().flex_1().min_w_0().min_h_0().child(tree_view))
+                    .when(self.thumbnails_open && !self.presentation_mode, |row| {
+                        row.child(self.render_thumbnails_strip(cx))
+                    })
+                    .child(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .child(tree_view)
+                            .children(self.render_status_toast(cx)),
+                    )
                     .when(self.sidebar_open, |row| row.child(self.render_sidebar(cx))),
             )
             .when(self.toc_popup_open, |root| root.child(self.render_toc_popup(cx)))
             .when_some(self.library_modal, |root, kind| {
                 root.child(self.render_library_modal(kind, cx))
             })
+            .when(self.thumbnail_grid_open, |root| {
+                root.child(self.render_thumbnail_grid_modal(cx))
+            })
+            .when(self.goto_page_open, |root| {
+                root.child(self.render_goto_page_popup(cx))
+            })
             .when(self.command_popup_open, |root| {
                 root.child(self.render_command_popup(cx))
+            })
+            .when(self.brand_menu_open && !self.presentation_mode, |root| {
+                root.child(self.render_brand_menu(cx))
+            })
+            .when(self.about_popup_open, |root| {
+                root.child(self.render_about_popup(cx))
             })
             .into_any_element()
     }
@@ -3230,8 +4588,8 @@ fn toolbar_btn(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .px_2p5()
-        .py_1()
+        .px_2()
+        .py_0p5()
         .rounded_sm()
         .cursor_pointer()
         .bg(if highlighted {

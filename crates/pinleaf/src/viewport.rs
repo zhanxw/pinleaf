@@ -23,7 +23,8 @@ use crate::actions::{
     DeleteNearestPortal, DetachPaneToWindow, FirstPage, FreezeAndNewWindow, FreezeAndSplitDown,
     FreezeAndSplitRight, HINT_MODE_CONTEXT, HighlightSelection, JumpBack, JumpForward, LastPage,
     LinkPortal, LookupScholar, MARK_PENDING_CONTEXT, NOTE_EDITOR_CONTEXT, NextPage, PrevPage,
-    ScrollHalfPageDown, ScrollHalfPageUp, ScrollLineDown, ScrollLineUp, SynctexInverseJump,
+    ScrollHalfPageDown, ScrollHalfPageUp, ScrollLineDown, ScrollLineUp, ScrollScreenDown,
+    ScrollScreenUp, SynctexInverseJump,
     ToggleAreaMode, ToggleAutoScroll, ToggleFreeze, TogglePortalFollower, ToggleReadingRuler,
     VIEWPORT_CONTEXT, ZoomFitContentWidth, ZoomFitWidth, ZoomIn, ZoomOut,
 };
@@ -57,6 +58,7 @@ pub enum ViewportEvent {
         dst: ReadingAnchor,
     },
     RequestTogglePortalFollower(ViewportId),
+    RequestGoToPage(ViewportId),
 }
 
 #[derive(Clone, Debug)]
@@ -166,6 +168,7 @@ pub struct PdfViewport {
     selection: Option<TextSelectionRange>,
     area_mode: bool,
     pending_mark_op: Option<PendingMarkOp>,
+    page_count_prefix: String,
     hint_mode: Option<HintModeState>,
     ruler_line: Option<(PageIndex, usize)>,
     overview_preview: Option<OverviewPreview>,
@@ -208,6 +211,7 @@ impl PdfViewport {
             selection: None,
             area_mode: false,
             pending_mark_op: None,
+            page_count_prefix: String::new(),
             hint_mode: None,
             ruler_line: None,
             overview_preview: None,
@@ -235,6 +239,7 @@ impl PdfViewport {
         self.jump_history = JumpHistory::default();
         self.selection = None;
         self.pending_mark_op = None;
+        self.page_count_prefix.clear();
         self.hint_mode = None;
         self.ruler_line = None;
         self.overview_preview = None;
@@ -751,7 +756,52 @@ impl PdfViewport {
         self.apply_scroll_delta(0.0, vh * 0.48, cx);
     }
 
+    pub fn scroll_screen_down(&mut self, cx: &mut Context<Self>) {
+        self.page_count_prefix.clear();
+        let vh = self.last_canvas_bounds.get().size.height.as_f32().max(320.0);
+        let step = (vh - 48.0).max(vh * 0.85);
+        self.apply_scroll_delta(0.0, -step, cx);
+    }
+
+    pub fn scroll_screen_up(&mut self, cx: &mut Context<Self>) {
+        self.page_count_prefix.clear();
+        let vh = self.last_canvas_bounds.get().size.height.as_f32().max(320.0);
+        let step = (vh - 48.0).max(vh * 0.85);
+        self.apply_scroll_delta(0.0, step, cx);
+    }
+
+    fn try_consume_page_prefix_jump(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.page_count_prefix.is_empty() {
+            return false;
+        }
+        let raw = std::mem::take(&mut self.page_count_prefix);
+        let Ok(page_num) = raw.parse::<u32>() else {
+            cx.notify();
+            return true;
+        };
+        if page_num == 0 {
+            cx.notify();
+            return true;
+        }
+        let last = self.session.read(cx).page_count().saturating_sub(1) as u32;
+        let target = PageIndex(page_num.saturating_sub(1).min(last));
+        if self.freeze_state.is_frozen() {
+            cx.emit(ViewportEvent::RequestSmartLinkRoute {
+                source_id: self.id,
+                page: target,
+                top_norm_y: Some(0.0),
+            });
+        } else {
+            self.jump_to_page_offset_recorded(target, 0.0, cx);
+        }
+        cx.notify();
+        true
+    }
+
     pub fn go_first_page(&mut self, cx: &mut Context<Self>) {
+        if self.try_consume_page_prefix_jump(cx) {
+            return;
+        }
         if self.freeze_state.is_frozen() {
             self.flash_frozen_guard(cx);
             return;
@@ -760,6 +810,9 @@ impl PdfViewport {
     }
 
     pub fn go_last_page(&mut self, cx: &mut Context<Self>) {
+        if self.try_consume_page_prefix_jump(cx) {
+            return;
+        }
         if self.freeze_state.is_frozen() {
             self.flash_frozen_guard(cx);
             return;
@@ -794,6 +847,39 @@ impl PdfViewport {
         self.hint_mode = None;
         self.pending_mark_op = Some(op);
         cx.notify();
+    }
+
+    fn overview_jump(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(ov) = self.overview_preview.take() else {
+            return false;
+        };
+        self.follow_internal_target(ov.page, ov.top_norm_y, cx);
+        true
+    }
+
+    fn overview_split(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(ov) = self.overview_preview.take() else {
+            return false;
+        };
+        if !self.freeze_state.is_frozen() {
+            self.freeze_with_locked_scale(cx);
+        }
+        cx.emit(ViewportEvent::RequestSmartLinkRoute {
+            source_id: self.id,
+            page: ov.page,
+            top_norm_y: Some(ov.top_norm_y),
+        });
+        cx.notify();
+        true
+    }
+
+    fn close_overview(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.overview_preview.take().is_some() {
+            cx.notify();
+            true
+        } else {
+            false
+        }
     }
 
     pub fn link_portal(&mut self, cx: &mut Context<Self>) {
@@ -1322,6 +1408,87 @@ impl PdfViewport {
                 }
             }
             return;
+        }
+
+        if self.pending_mark_op.is_none() && self.editing_note.is_none() {
+            if !self.page_count_prefix.is_empty() && ks.key == "escape" {
+                self.page_count_prefix.clear();
+                cx.stop_propagation();
+                cx.notify();
+                return;
+            }
+            if !self.page_count_prefix.is_empty() && ks.key == "backspace" {
+                self.page_count_prefix.pop();
+                cx.stop_propagation();
+                cx.notify();
+                return;
+            }
+            if !ks.modifiers.platform
+                && !ks.modifiers.control
+                && !ks.modifiers.alt
+                && let Some(ch_str) = &ks.key_char
+                && let Some(ch) = ch_str.chars().next()
+                && ch.is_ascii_digit()
+                && (!self.page_count_prefix.is_empty() || ch != '0')
+            {
+                if self.page_count_prefix.len() < 5 {
+                    self.page_count_prefix.push(ch);
+                    cx.notify();
+                }
+                cx.stop_propagation();
+                return;
+            }
+            if !self.page_count_prefix.is_empty()
+                && ks.key != "g"
+                && !matches!(ks.key.as_str(), "shift" | "control" | "alt" | "platform")
+            {
+                self.page_count_prefix.clear();
+                cx.notify();
+            }
+
+            if self.overview_preview.is_some() {
+                if ks.key == "enter"
+                    && !ks.modifiers.platform
+                    && !ks.modifiers.control
+                    && !ks.modifiers.shift
+                    && !ks.modifiers.alt
+                {
+                    self.page_count_prefix.clear();
+                    self.overview_jump(cx);
+                    cx.stop_propagation();
+                    return;
+                }
+                if ((ks.modifiers.platform || ks.modifiers.control || ks.modifiers.shift)
+                    && ks.key == "enter")
+                    || (!ks.modifiers.platform
+                        && !ks.modifiers.control
+                        && !ks.modifiers.alt
+                        && self.selection.is_none()
+                        && ks
+                            .key_char
+                            .as_deref()
+                            .is_some_and(|c| c.eq_ignore_ascii_case("s")))
+                {
+                    self.page_count_prefix.clear();
+                    self.overview_split(cx);
+                    cx.stop_propagation();
+                    return;
+                }
+                if ks.key == "escape"
+                    || (!ks.modifiers.platform
+                        && !ks.modifiers.control
+                        && !ks.modifiers.alt
+                        && ks
+                            .key_char
+                            .as_deref()
+                            .is_some_and(|c| c.eq_ignore_ascii_case("x")))
+                {
+                    self.page_count_prefix.clear();
+                    self.close_overview(cx);
+                    cx.stop_propagation();
+                    return;
+                }
+            }
         }
 
         let Some(op) = self.pending_mark_op else {
@@ -2174,7 +2341,7 @@ impl PdfViewport {
                         .bg(rgb(0x047857))
                         .text_color(rgb(0xffffff))
                         .cursor_pointer()
-                        .child(format!("▶ {:.0}px/s", speed))
+                        .child(format!("Auto {:.0}px/s", speed))
                         .on_click(cx.listener(|this, _, _, cx| this.toggle_auto_scroll(cx))),
                 )
             })
@@ -2192,9 +2359,25 @@ impl PdfViewport {
             )
             .child(
                 div()
-                    .px_1()
-                    .text_color(rgb(0x3f3f46))
-                    .child(format!("p.{current_page}/{page_count}")),
+                    .id(("goto-pg-pill", self.id.0))
+                    .px_1p5()
+                    .py_0p5()
+                    .rounded_sm()
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgb(0xe4e4e7)))
+                    .text_color(if self.page_count_prefix.is_empty() {
+                        rgb(0x3f3f46)
+                    } else {
+                        rgb(0x1d4ed8)
+                    })
+                    .child(if self.page_count_prefix.is_empty() {
+                        format!("p.{current_page}/{page_count}")
+                    } else {
+                        format!("Go: {}_ ({current_page}/{page_count})", self.page_count_prefix)
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        cx.emit(ViewportEvent::RequestGoToPage(this.id));
+                    })),
             )
             .child(
                 div()
@@ -2656,9 +2839,9 @@ impl PdfViewport {
             .page_metas
             .get(preview.page.as_usize())
             .cloned()?;
-        let card_w = 400.0_f32;
+        let card_w = 436.0_f32;
         let preview_h = 218.0_f32;
-        let vw = bounds.size.width.as_f32().max(420.0);
+        let vw = bounds.size.width.as_f32().max(456.0);
         let vh = bounds.size.height.as_f32().max(280.0);
         let local_x = (preview.anchor_win_pt.x.as_f32() - bounds.origin.x.as_f32() + 12.0)
             .clamp(8.0, (vw - card_w - 8.0).max(8.0));
@@ -2681,8 +2864,6 @@ impl PdfViewport {
                 rgb(((custom_bg[0] as u32) << 16) | ((custom_bg[1] as u32) << 8) | (custom_bg[2] as u32))
             }
         };
-        let target_page = preview.page;
-        let target_y = preview.top_norm_y;
 
         Some(
             div()
@@ -2707,6 +2888,7 @@ impl PdfViewport {
                         .flex()
                         .items_center()
                         .justify_between()
+                        .gap_2()
                         .px_2p5()
                         .py_1p5()
                         .border_b_1()
@@ -2715,6 +2897,9 @@ impl PdfViewport {
                         .text_color(rgb(0xf4f4f5))
                         .child(
                             div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child(format!(
                                     "Overview: {} (p.{})",
@@ -2725,6 +2910,7 @@ impl PdfViewport {
                         .child(
                             div()
                                 .flex()
+                                .flex_shrink_0()
                                 .items_center()
                                 .gap_1()
                                 .child(
@@ -2735,10 +2921,9 @@ impl PdfViewport {
                                         .rounded_sm()
                                         .bg(rgb(0x2563eb))
                                         .cursor_pointer()
-                                        .child("Jump")
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            this.overview_preview = None;
-                                            this.follow_internal_target(target_page, target_y, cx);
+                                        .child("Jump [Enter]")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.overview_jump(cx);
                                         })),
                                 )
                                 .child(
@@ -2750,17 +2935,9 @@ impl PdfViewport {
                                         .bg(rgb(0x27272a))
                                         .hover(|s| s.bg(rgb(0x3f3f46)))
                                         .cursor_pointer()
-                                        .child("Split")
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            this.overview_preview = None;
-                                            if !this.freeze_state.is_frozen() {
-                                                this.freeze_with_locked_scale(cx);
-                                            }
-                                            cx.emit(ViewportEvent::RequestSmartLinkRoute {
-                                                source_id: this.id,
-                                                page: target_page,
-                                                top_norm_y: Some(target_y),
-                                            });
+                                        .child("Split [S]")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.overview_split(cx);
                                         })),
                                 )
                                 .child(
@@ -2770,11 +2947,11 @@ impl PdfViewport {
                                         .py_0p5()
                                         .rounded_sm()
                                         .bg(rgb(0x3f3f46))
+                                        .hover(|s| s.bg(rgb(0x52525b)))
                                         .cursor_pointer()
-                                        .child("x")
+                                        .child("x [Esc]")
                                         .on_click(cx.listener(|this, _, _, cx| {
-                                            this.overview_preview = None;
-                                            cx.notify();
+                                            this.close_overview(cx);
                                         })),
                                 ),
                         ),
@@ -3324,6 +3501,8 @@ impl Render for PdfViewport {
             .on_action(cx.listener(|this, _: &ScrollLineUp, _, cx| this.scroll_line_up(cx)))
             .on_action(cx.listener(|this, _: &ScrollHalfPageDown, _, cx| this.scroll_half_page_down(cx)))
             .on_action(cx.listener(|this, _: &ScrollHalfPageUp, _, cx| this.scroll_half_page_up(cx)))
+            .on_action(cx.listener(|this, _: &ScrollScreenDown, _, cx| this.scroll_screen_down(cx)))
+            .on_action(cx.listener(|this, _: &ScrollScreenUp, _, cx| this.scroll_screen_up(cx)))
             .on_action(cx.listener(|this, _: &FirstPage, _, cx| this.go_first_page(cx)))
             .on_action(cx.listener(|this, _: &LastPage, _, cx| this.go_last_page(cx)))
             .on_action(cx.listener(|this, _: &BeginSetMark, _, cx| {

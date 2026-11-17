@@ -259,8 +259,8 @@ const Scene3CliIpc: React.FC = () => {
             {step === 1
               ? 'pinleaf --execute-command goto_page 3'
               : step === 2
-              ? 'pinleaf --execute-command split_right'
-              : 'pinleaf --execute-command cycle_color_mode'}
+              ? 'pinleaf --execute-command toggle_thumbnails'
+              : 'pinleaf --execute-command split_right'}
           </span>
         </div>
         <div style={{ display: 'flex', gap: 16, fontSize: 18 }}>
@@ -271,25 +271,36 @@ const Scene3CliIpc: React.FC = () => {
 
       <PinleafWindow
         heightPx={772}
-        theme={step === 3 ? 'sepia' : 'light'}
         keyPressChip={`IPC Command ${step}/3 Executed Live`}
-        panes={
+        thumbnailsStrip={
           step >= 2
+            ? {
+                activePage: 3,
+                pages: [
+                  { page: 1, lockedTrail: step === 3 ? 1 : undefined },
+                  { page: 2, notes: 1 },
+                  { page: 3 },
+                ],
+              }
+            : undefined
+        }
+        panes={
+          step === 3
             ? [
                 {
-                  label: 'Pane #1 • Page 3',
+                  label: 'Page 3 (Anchored)',
                   frozen: true,
                   pageProps: { pageNumber: 3, focusSection: 'theorem' },
                 },
                 {
-                  label: 'Pane #2 • IPC Split Right',
+                  label: 'IPC Split Right',
                   active: true,
                   pageProps: { pageNumber: 4, focusSection: 'figure' },
                 },
               ]
             : [
                 {
-                  label: 'Pane #1 • Page 3 (via IPC goto_page 3)',
+                  label: 'Page 3 (via IPC goto_page 3)',
                   active: true,
                   pageProps: { pageNumber: 3, focusSection: 'theorem' },
                 },
@@ -304,44 +315,60 @@ const Scene4ShellExtensions: React.FC = () => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
 
-  const ranAt = Math.round(durationInFrames * 0.56);
-  const ran = frame >= ranAt;
+  const brandMenuAt = Math.round(durationInFrames * 0.44);
+  const aboutAt = Math.round(durationInFrames * 0.64);
+  const copyToastAt = Math.round(durationInFrames * 0.84);
+  const showExtensions = frame < brandMenuAt;
+  const showBrandMenu = frame >= brandMenuAt && frame < aboutAt;
+  const showAbout = frame >= aboutAt;
 
   return (
     <PinleafWindow
-      keyPressChip={ran ? 'Executed Extension [Ctrl+Y]' : 'Pressed  ⇧⌘E  →  Shell & Python Extensions'}
+      keyPressChip={
+        showAbout
+          ? 'Pinleaf -> About Pinleaf (v0.2.2)'
+          : showBrandMenu
+          ? 'Clicked Top-Left  Pinleaf  Menu'
+          : 'Pressed  ⇧⌘E  ->  Shell & Python Extensions'
+      }
+      brandMenuOpen={showBrandMenu}
+      aboutModal={showAbout ? { version: '0.2.2' } : undefined}
       panes={[
         {
-          label: 'Pane #1 • Selected Quote Ready for External Tool',
+          label: 'Selected Quote Ready for External Tool',
           active: true,
           pageProps: { pageNumber: 1, focusSection: 'intro', activeSelectionText: true },
         },
       ]}
-      libraryModal={{
-        heading: 'Extensions & External Commands (⇧⌘E)',
-        rows: [
-          {
-            title: 'Copy Formatted Citation & Quote',
-            meta: `printf '%s (p.%s)' {selected_text} {page} | pbcopy  •  PINLEAF_DOI=10.1145/3597503.3623310`,
-            badge: 'Ctrl+Y',
-            selected: true,
-          },
-          {
-            title: 'Send Abstract to Zotero / Notes Script',
-            meta: 'python3 ~/scripts/send_to_notes.py %{file_path} %{page_number} %{doi}',
-            badge: 'Alt+Z',
-          },
-          {
-            title: 'Ask Local LLM about Selection',
-            meta: 'ollama run llama3.2 "Summarize theorem:" {selected_text}',
-            badge: 'Palette',
-          },
-        ],
-      }}
-      statusBanner={
-        ran
+      libraryModal={
+        showExtensions
           ? {
-              text: 'Shell-safe single-quoting • Copied formatted quote + DOI',
+              heading: 'Extensions & External Commands (⇧⌘E)',
+              rows: [
+                {
+                  title: 'Copy Formatted Citation & Quote',
+                  meta: `printf '%s (p.%s)' {selected_text} {page} | pbcopy  •  PINLEAF_DOI=10.1145/3597503.3623310`,
+                  badge: 'Ctrl+Y',
+                  selected: true,
+                },
+                {
+                  title: 'Send Abstract to Zotero / Notes Script',
+                  meta: 'python3 ~/scripts/send_to_notes.py %{file_path} %{page_number} %{doi}',
+                  badge: 'Alt+Z',
+                },
+                {
+                  title: 'Ask Local LLM about Selection',
+                  meta: 'ollama run llama3.2 "Summarize theorem:" {selected_text}',
+                  badge: 'Palette',
+                },
+              ],
+            }
+          : undefined
+      }
+      statusBanner={
+        frame >= copyToastAt
+          ? {
+              text: 'Copied Pinleaf version to clipboard',
               tone: 'ok',
             }
           : undefined

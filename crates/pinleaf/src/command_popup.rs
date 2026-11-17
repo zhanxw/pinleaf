@@ -18,6 +18,8 @@ pub enum CommandId {
     RedoAnnot,
     NextPage,
     PrevPage,
+    ScrollScreenDown,
+    ScrollScreenUp,
     JumpBack,
     JumpForward,
     FirstPage,
@@ -26,6 +28,9 @@ pub enum CommandId {
     NextSearchMatch,
     PrevSearchMatch,
     ToggleTocPopup,
+    GoToPage,
+    ToggleThumbnails,
+    ToggleThumbnailGrid,
     BeginSetMark,
     BeginJumpMark,
     ZoomIn,
@@ -54,6 +59,7 @@ pub enum CommandId {
     ToggleAutoReload,
     SavePdf,
     SavePdfAs,
+    ShowAbout,
     QuitApp,
     CloseCommandPopup,
 }
@@ -241,6 +247,30 @@ const COMMANDS: &[CommandEntry] = &[
         keywords: "toc outline chapters headings sections",
     },
     CommandEntry {
+        id: CommandId::GoToPage,
+        category: "Navigation & Search",
+        title: "Go to Page...",
+        description: "Jump directly to a specific 1-based page number (also type <num>G or /<num>)",
+        shortcut: platform_shortcut("⌥⌘G / ^G", "Ctrl+Alt+G / Ctrl+G"),
+        keywords: "goto jump page number navigate",
+    },
+    CommandEntry {
+        id: CommandId::ToggleThumbnails,
+        category: "Navigation & Search",
+        title: "Toggle Page Thumbnails Strip",
+        description: "Show or hide the scrollable page thumbnails sidebar strip",
+        shortcut: platform_shortcut("⇧⌘T", "Ctrl+Shift+T"),
+        keywords: "thumbnails preview strip sidebar pages",
+    },
+    CommandEntry {
+        id: CommandId::ToggleThumbnailGrid,
+        category: "Navigation & Search",
+        title: "Thumbnail Grid Overview",
+        description: "Open a 4-column visual contact sheet of all PDF pages",
+        shortcut: platform_shortcut("⌥⌘T", "Ctrl+Alt+T"),
+        keywords: "thumbnails grid contact sheet overview pages",
+    },
+    CommandEntry {
         id: CommandId::JumpBack,
         category: "Navigation & Search",
         title: "Jump Back in History",
@@ -287,6 +317,22 @@ const COMMANDS: &[CommandEntry] = &[
         description: "Step to the previous page in an active pane",
         shortcut: "PgUp",
         keywords: "back scroll page up",
+    },
+    CommandEntry {
+        id: CommandId::ScrollScreenDown,
+        category: "Navigation & Search",
+        title: "Scroll Down One Screen",
+        description: "Scroll down by one screenful with reading overlap (macOS Preview style)",
+        shortcut: "Space",
+        keywords: "spacebar scroll page down preview",
+    },
+    CommandEntry {
+        id: CommandId::ScrollScreenUp,
+        category: "Navigation & Search",
+        title: "Scroll Up One Screen",
+        description: "Scroll up by one screenful with reading overlap",
+        shortcut: "Shift+Space",
+        keywords: "spacebar scroll page up preview",
     },
     CommandEntry {
         id: CommandId::FirstPage,
@@ -515,6 +561,14 @@ const COMMANDS: &[CommandEntry] = &[
         keywords: "copy export save new file",
     },
     CommandEntry {
+        id: CommandId::ShowAbout,
+        category: "Document & Help",
+        title: "About Pinleaf",
+        description: "Show Pinleaf program version and build information",
+        shortcut: "Pinleaf Menu",
+        keywords: "about version build info release",
+    },
+    CommandEntry {
         id: CommandId::QuitApp,
         category: "Document & App",
         title: "Quit Pinleaf",
@@ -580,6 +634,40 @@ pub fn filter_commands(query: &str) -> Vec<&'static CommandEntry> {
     matches.into_iter().map(|(_, _, entry)| entry).collect()
 }
 
+/// Parses direct page-jump inputs typed into the Command Palette (`14`, `:14`, `p14`, `p.14`, `page 14`, `goto 14`).
+pub fn parse_page_jump_query(query: &str, page_count: usize) -> Option<u32> {
+    if page_count == 0 {
+        return None;
+    }
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let rest = if let Some(s) = lower.strip_prefix("page ") {
+        s.trim()
+    } else if let Some(s) = lower.strip_prefix("goto ") {
+        s.trim()
+    } else if let Some(s) = lower.strip_prefix("p.") {
+        s.trim()
+    } else if let Some(s) = lower.strip_prefix('p') {
+        s.trim()
+    } else if let Some(s) = lower.strip_prefix(':') {
+        s.trim()
+    } else {
+        lower.as_str()
+    };
+
+    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let parsed: u32 = rest.parse().ok()?;
+    if parsed == 0 {
+        return None;
+    }
+    Some(parsed.clamp(1, page_count as u32))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -642,5 +730,19 @@ mod tests {
     #[test]
     fn unmatched_query_returns_empty() {
         assert!(filter_commands("nonexistent_command_xyz").is_empty());
+    }
+
+    #[test]
+    fn parse_page_jump_query_handles_digits_prefixes_and_bounds() {
+        assert_eq!(parse_page_jump_query("14", 40), Some(14));
+        assert_eq!(parse_page_jump_query("  :7  ", 40), Some(7));
+        assert_eq!(parse_page_jump_query("p12", 40), Some(12));
+        assert_eq!(parse_page_jump_query("p. 3", 40), Some(3));
+        assert_eq!(parse_page_jump_query("page 9", 40), Some(9));
+        assert_eq!(parse_page_jump_query("goto 99", 40), Some(40));
+        assert_eq!(parse_page_jump_query("0", 40), None);
+        assert_eq!(parse_page_jump_query("p0", 40), None);
+        assert_eq!(parse_page_jump_query("freeze", 40), None);
+        assert_eq!(parse_page_jump_query("5", 0), None);
     }
 }

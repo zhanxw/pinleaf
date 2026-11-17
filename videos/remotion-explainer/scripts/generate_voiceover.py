@@ -10,6 +10,7 @@ with `ffmpeg`, measure exact durations, and write `src/generated/timings.json`."
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
 import subprocess
@@ -27,6 +28,7 @@ DEFAULT_RATE = "+2%"
 ROOT = Path(__file__).resolve().parent.parent
 AUDIO_DIR = ROOT / "public" / "audio"
 OUT_JSON = ROOT / "src" / "generated" / "timings.json"
+CACHE_JSON = ROOT / "src" / "generated" / "voiceover_cache.json"
 
 VIDEOS = [
     {
@@ -72,36 +74,36 @@ VIDEOS = [
         "filename": "02-navigation-smart-jump-hints.mp4",
         "episode": "02 / 05",
         "title": "Smart Jump, Hints & Navigation",
-        "subtitle": "Command Palette, unlinked ref resolution, Vimium hints, TOC & regex search",
+        "subtitle": "Go-to-Page, Page Thumbnails, Smart Jump, Overview & Vimium Hints",
         "accent": "#60a5fa",
         "scenes": [
             {
                 "id": "v2_s1",
-                "sceneTitle": "Instant Command Palette",
-                "shortcutBadge": "/  or  ?",
-                "caption": "Press Slash or Question Mark anytime to open the Command Palette. Type keywords to filter actions and inspect platform shortcuts instantly.",
-                "narration": "Press Slash or Question Mark anytime to open the Command Palette. Just type a keyword to filter actions and check keyboard shortcuts instantly.",
+                "sceneTitle": "Command Palette & Go to Page",
+                "shortcutBadge": "/  •  ⌥⌘G  •  <num>G",
+                "caption": "Open the Command Palette with Slash to filter actions or type a page number directly, or jump via Option Command G, the page pill, or Vim count G.",
+                "narration": "Open the Command Palette with Slash to filter actions or type a page number directly, or jump anytime with Option Command G, the page pill, or number G.",
             },
             {
                 "id": "v2_s2",
-                "sceneTitle": "Heuristic Smart Jump & Overview",
-                "shortcutBadge": "Click  •  Right-Click",
-                "caption": "Heuristic Smart Jump resolves unlinked labels like Figure 1, Theorem 1, or Citation 12. Right-click opens a floating Overview card.",
-                "narration": "Heuristic Smart Jump resolves unlinked labels like Figure 1, Theorem 1, or Citation 12. Right-click opens a floating Overview preview without leaving your place.",
+                "sceneTitle": "Smart Jump & Keyboard Overview",
+                "shortcutBadge": ":  •  Enter  •  S  •  Esc",
+                "caption": "Smart Jump resolves unlinked figures, theorems, and citations. Open an Overview card and press Enter to jump, S to split, or Escape to close.",
+                "narration": "Smart Jump resolves unlinked figures, theorems, and citations. Open a floating Overview preview, then press Enter to jump, S to split right, or Escape to close.",
             },
             {
                 "id": "v2_s3",
-                "sceneTitle": "Vimium 2-Letter Hints",
-                "shortcutBadge": ";  •  :  •  V",
-                "caption": "Stay completely keyboard-driven with Vimium two-letter hints. Semicolon jumps links, Colon opens Overview previews, and V selects text between two words.",
-                "narration": "Stay completely hands-free on your keyboard with two-letter hints. Semicolon jumps to links, Colon opens Overview previews, and V selects any span between two words.",
+                "sceneTitle": "Page Thumbnails Strip & 4-Col Grid",
+                "shortcutBadge": "⇧⌘T  •  ⌥⌘T  •  ⌘Click",
+                "caption": "Toggle the virtualized Page Thumbnails strip with Shift Command T, or open the four-column Thumbnail Grid with Option Command T to jump or Command-Enter split.",
+                "narration": "Browse visually with the Page Thumbnails strip on Shift Command T, or pop open the four-column Thumbnail Grid on Option Command T to jump or split.",
             },
             {
                 "id": "v2_s4",
-                "sceneTitle": "Auto-TOC, Regex Search & Marks",
-                "shortcutBadge": "T  •  ⌘F  •  m / `  •  ⌘[",
-                "caption": "Explore with Auto-TOC on T, regex search via Command F, single-key marks with m and backtick, jump history, and Vim scrolling.",
-                "narration": "Browse your inferred table of contents with T, run regex search with Command F, drop single-key marks with m, and glide with jump history and Vim scrolling.",
+                "sceneTitle": "Vimium Hints, Auto-TOC & Space Scroll",
+                "shortcutBadge": "; / V  •  T  •  ⌘F  •  Space",
+                "caption": "Navigate hands-free with two-letter Vimium hints, Auto-TOC on T, regex search on Command F, named marks, and Preview-style Spacebar screen scrolling.",
+                "narration": "Stay hands-free with two-letter hints, Auto-TOC on T, regex search on Command F, single-key marks, and smooth Mac Preview style Spacebar scrolling.",
             },
         ],
     },
@@ -207,15 +209,15 @@ VIDEOS = [
                 "id": "v5_s3",
                 "sceneTitle": "Unix Domain Socket CLI IPC",
                 "shortcutBadge": "--execute-command",
-                "caption": "Script live windows over a private Unix domain socket. Run execute-command from any terminal to jump pages, split panes, or run searches.",
-                "narration": "Automate live windows over a private Unix domain socket. Run execute-command from your terminal to jump pages, split panes, or trigger searches.",
+                "caption": "Script live windows over a Unix socket with execute-command to jump pages, toggle thumbnails, split panes, or run searches from any terminal.",
+                "narration": "Automate live windows over a Unix domain socket. Run execute-command from your terminal to jump pages, toggle thumbnails, or split panes.",
             },
             {
                 "id": "v5_s4",
-                "sceneTitle": "Shell & Python Extensions",
-                "shortcutBadge": "⇧⌘E",
-                "caption": "Press Shift Command E or custom hotkeys to run shell or Python extensions, safely passing selected quotes, DOIs, and paths to external workflows.",
-                "narration": "Press Shift Command E or bind custom hotkeys to run shell and Python scripts, safely passing selected quotes, file paths, and D-O-Is to your tools.",
+                "sceneTitle": "Extensions & About Pinleaf",
+                "shortcutBadge": "⇧⌘E  •  Pinleaf Menu",
+                "caption": "Run shell or Python extensions with Shift Command E, and click the top-left Pinleaf menu anytime to open About Pinleaf and copy your build version.",
+                "narration": "Run shell and Python extensions with Shift Command E, and click the top-left Pinleaf menu anytime to inspect About Pinleaf and copy your version.",
             },
         ],
     },
@@ -228,48 +230,66 @@ async def synthesize_scene(
     scene: dict,
     voice: str,
     rate: str,
+    cache: dict[str, str],
+    only_set: set[str] | None,
+    force: bool,
 ) -> dict:
     sid = scene["id"]
     raw_mp3 = tmp_dir / f"{sid}_raw.mp3"
     final_mp3 = AUDIO_DIR / f"{sid}.mp3"
+    key_hash = hashlib.sha256(f"{voice}|{rate}|{scene['narration']}".encode()).hexdigest()
 
-    async with sem:
-        last_err: Exception | None = None
-        for attempt in range(1, 5):
-            try:
-                comm = edge_tts.Communicate(scene["narration"], voice, rate=rate)
-                await comm.save(str(raw_mp3))
-                last_err = None
-                break
-            except Exception as err:
-                last_err = err
-                print(f"retry {attempt}/4 for {sid}: {err}")
-                await asyncio.sleep(1.5 * attempt)
-        if last_err is not None:
-            raise last_err
+    if force or not final_mp3.exists():
+        should_synth = True
+    elif only_set is not None:
+        should_synth = sid in only_set
+    else:
+        should_synth = cache.get(sid) != key_hash
 
-    subprocess.run(
-        [
-            "/opt/homebrew/bin/ffmpeg",
-            "-y",
-            "-i",
-            str(raw_mp3),
-            "-af",
-            "loudnorm=I=-16:TP=-1.5:LRA=11,adelay=180|180,apad=pad_dur=0.48",
-            "-ar",
-            "44100",
-            "-ac",
-            "2",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "192k",
-            str(final_mp3),
-        ],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    if should_synth:
+        async with sem:
+            await asyncio.sleep(1.5)
+            last_err: Exception | None = None
+            for attempt in range(1, 7):
+                try:
+                    comm = edge_tts.Communicate(scene["narration"], voice, rate=rate)
+                    await comm.save(str(raw_mp3))
+                    last_err = None
+                    break
+                except Exception as err:
+                    last_err = err
+                    print(f"retry {attempt}/6 for {sid}: {err}")
+                    await asyncio.sleep(2.5 * attempt)
+            if last_err is not None:
+                raise last_err
+
+        subprocess.run(
+            [
+                "/opt/homebrew/bin/ffmpeg",
+                "-y",
+                "-i",
+                str(raw_mp3),
+                "-af",
+                "loudnorm=I=-16:TP=-1.5:LRA=11,adelay=180|180,apad=pad_dur=0.48",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                "-c:a",
+                "libmp3lame",
+                "-b:a",
+                "192k",
+                str(final_mp3),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"synthesized {sid} -> {final_mp3.name}")
+    else:
+        print(f"cached {sid} -> {final_mp3.name}")
+
+    cache[sid] = key_hash
 
     dur_str = subprocess.check_output(
         [
@@ -298,9 +318,21 @@ async def synthesize_scene(
     }
 
 
-async def run_all(voice: str, rate: str) -> None:
+async def run_all(
+    voice: str,
+    rate: str,
+    only_set: set[str] | None,
+    force: bool,
+) -> None:
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+
+    cache: dict[str, str] = {}
+    if CACHE_JSON.exists():
+        try:
+            cache = json.loads(CACHE_JSON.read_text())
+        except Exception:
+            cache = {}
 
     manifest = {
         "fps": FPS,
@@ -315,7 +347,9 @@ async def run_all(voice: str, rate: str) -> None:
         for video in VIDEOS:
             scene_records = []
             for scene in video["scenes"]:
-                rec = await synthesize_scene(sem, tmp, scene, voice, rate)
+                rec = await synthesize_scene(
+                    sem, tmp, scene, voice, rate, cache, only_set, force
+                )
                 scene_records.append(rec)
             total_frames = sum(s["durationInFrames"] for s in scene_records) - (
                 (len(scene_records) - 1) * TRANSITION_FRAMES
@@ -337,15 +371,23 @@ async def run_all(voice: str, rate: str) -> None:
             )
 
     OUT_JSON.write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"Wrote {OUT_JSON}")
+    CACHE_JSON.write_text(json.dumps(cache, indent=2, sort_keys=True) + "\n")
+    print(f"Wrote {OUT_JSON} and {CACHE_JSON}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate neural voiceover MP3s for Pinleaf explainer videos.")
     parser.add_argument("--voice", default=DEFAULT_VOICE, help=f"edge-tts neural voice (default: {DEFAULT_VOICE})")
     parser.add_argument("--rate", default=DEFAULT_RATE, help=f"Speech rate offset (default: {DEFAULT_RATE})")
+    parser.add_argument("--only", default="", help="Comma-separated scene IDs to force-resynthesize (reuses existing MP3s for others)")
+    parser.add_argument("--force", action="store_true", help="Force re-synthesis of all scenes")
     args = parser.parse_args()
-    asyncio.run(run_all(args.voice, args.rate))
+    only_set = (
+        {item.strip() for item in args.only.split(",") if item.strip()}
+        if args.only.strip()
+        else None
+    )
+    asyncio.run(run_all(args.voice, args.rate, only_set, args.force))
 
 
 if __name__ == "__main__":

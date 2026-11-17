@@ -22,6 +22,7 @@ actions!(
         OpenDemo,
         SavePdf,
         SavePdfAs,
+        ShowAbout,
         QuitApp,
         UndoAnnot,
         RedoAnnot,
@@ -34,6 +35,9 @@ actions!(
         NextSearchMatch,
         PrevSearchMatch,
         ToggleTocPopup,
+        GoToPage,
+        ToggleThumbnails,
+        ToggleThumbnailGrid,
         ToggleFreeze,
         FreezeAndSplitRight,
         FreezeAndSplitDown,
@@ -58,6 +62,8 @@ actions!(
         ScrollLineUp,
         ScrollHalfPageDown,
         ScrollHalfPageUp,
+        ScrollScreenDown,
+        ScrollScreenUp,
         FirstPage,
         LastPage,
         BeginSetMark,
@@ -99,6 +105,10 @@ pub fn register_keybindings(cx: &mut gpui::App) {
         KeyBinding::new("shift-n", PrevSearchMatch, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("secondary-t", ToggleTocPopup, Some(APP_CONTEXT)),
         KeyBinding::new("t", ToggleTocPopup, Some(APP_NO_INPUT)),
+        KeyBinding::new("secondary-alt-g", GoToPage, Some(APP_CONTEXT)),
+        KeyBinding::new("ctrl-g", GoToPage, Some(APP_NO_INPUT)),
+        KeyBinding::new("secondary-shift-t", ToggleThumbnails, Some(APP_CONTEXT)),
+        KeyBinding::new("secondary-alt-t", ToggleThumbnailGrid, Some(APP_CONTEXT)),
         KeyBinding::new("/", ToggleCommandPopup, Some(APP_NO_INPUT)),
         KeyBinding::new("?", ToggleCommandPopup, Some(APP_NO_INPUT)),
         KeyBinding::new("shift-/", ToggleCommandPopup, Some(APP_NO_INPUT)),
@@ -134,6 +144,8 @@ pub fn register_keybindings(cx: &mut gpui::App) {
         KeyBinding::new("ctrl-d", ScrollHalfPageDown, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("u", ScrollHalfPageUp, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("ctrl-u", ScrollHalfPageUp, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("space", ScrollScreenDown, Some(VIEWPORT_NO_INPUT)),
+        KeyBinding::new("shift-space", ScrollScreenUp, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("g", FirstPage, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("home", FirstPage, Some(VIEWPORT_NO_INPUT)),
         KeyBinding::new("shift-g", LastPage, Some(VIEWPORT_NO_INPUT)),
@@ -247,6 +259,19 @@ pub fn register_keybindings(cx: &mut gpui::App) {
                     Some(APP_NO_INPUT),
                 ));
             }
+            "goto_page" => {
+                custom_bindings.push(KeyBinding::new(&key_spec, GoToPage, Some(APP_NO_INPUT)));
+            }
+            "toggle_thumbnails" => {
+                custom_bindings.push(KeyBinding::new(&key_spec, ToggleThumbnails, Some(APP_NO_INPUT)));
+            }
+            "toggle_thumbnail_grid" => {
+                custom_bindings.push(KeyBinding::new(
+                    &key_spec,
+                    ToggleThumbnailGrid,
+                    Some(APP_NO_INPUT),
+                ));
+            }
             _ => {}
         }
     }
@@ -258,6 +283,8 @@ pub fn register_keybindings(cx: &mut gpui::App) {
 pub fn install_app_menus(cx: &mut gpui::App) {
     cx.set_menus([
         Menu::new("Pinleaf").items([
+            MenuItem::action("About Pinleaf", ShowAbout),
+            MenuItem::separator(),
             MenuItem::os_submenu("Services", SystemMenuType::Services),
             MenuItem::separator(),
             MenuItem::action("Command Palette…", ToggleCommandPopup),
@@ -291,7 +318,10 @@ pub fn install_app_menus(cx: &mut gpui::App) {
         Menu::new("View").items([
             MenuItem::action("Search in Document…", OpenSearch),
             MenuItem::action("Global Highlight Search…", OpenGlobalHighlightsPopup),
+            MenuItem::action("Go to Page…", GoToPage),
             MenuItem::action("Table of Contents…", ToggleTocPopup),
+            MenuItem::action("Toggle Page Thumbnails", ToggleThumbnails),
+            MenuItem::action("Thumbnail Grid Overview", ToggleThumbnailGrid),
             MenuItem::action("Toggle Annotations Sidebar", ToggleSidebar),
             MenuItem::separator(),
             MenuItem::action("Freeze / Unfreeze Pane", ToggleFreeze),
@@ -363,6 +393,12 @@ mod tests {
             "alt-=",
             "alt-+",
             "alt--",
+            "secondary-alt-g",
+            "ctrl-g",
+            "secondary-shift-t",
+            "secondary-alt-t",
+            "space",
+            "shift-space",
         ] {
             assert!(Keystroke::parse(raw).is_ok(), "failed to parse {raw}");
         }

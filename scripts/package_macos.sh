@@ -94,6 +94,10 @@ cp -X "$ICNS_SRC" "$APP_DIR/Contents/Resources/Pinleaf.icns"
 cp -X "$PLIST_SRC" "$APP_DIR/Contents/Info.plist"
 printf 'APPL????' > "$APP_DIR/Contents/PkgInfo"
 
+if [[ -z "$APP_VERSION" ]]; then
+    APP_VERSION="$(grep -m1 '^version = "' "$ROOT_DIR/Cargo.toml" | sed -E 's/^version = "([^"]+)".*/\1/')"
+fi
+
 if [[ -n "$APP_VERSION" ]]; then
     echo "==> Setting bundle version to $APP_VERSION..."
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$APP_DIR/Contents/Info.plist"

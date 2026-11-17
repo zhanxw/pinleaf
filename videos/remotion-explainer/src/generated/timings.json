@@ -56,46 +56,46 @@
       "filename": "02-navigation-smart-jump-hints.mp4",
       "episode": "02 / 05",
       "title": "Smart Jump, Hints & Navigation",
-      "subtitle": "Command Palette, unlinked ref resolution, Vimium hints, TOC & regex search",
+      "subtitle": "Go-to-Page, Page Thumbnails, Smart Jump, Overview & Vimium Hints",
       "accent": "#60a5fa",
-      "totalFrames": 1336,
-      "durationSeconds": 44.53,
+      "totalFrames": 1319,
+      "durationSeconds": 43.97,
       "scenes": [
         {
           "id": "v2_s1",
-          "sceneTitle": "Instant Command Palette",
-          "shortcutBadge": "/  or  ?",
-          "caption": "Press Slash or Question Mark anytime to open the Command Palette. Type keywords to filter actions and inspect platform shortcuts instantly.",
+          "sceneTitle": "Command Palette & Go to Page",
+          "shortcutBadge": "/  \u2022  \u2325\u2318G  \u2022  <num>G",
+          "caption": "Open the Command Palette with Slash to filter actions or type a page number directly, or jump via Option Command G, the page pill, or Vim count G.",
           "audioFile": "audio/v2_s1.mp3",
-          "audioSeconds": 10.068,
-          "durationInFrames": 309
+          "audioSeconds": 10.644,
+          "durationInFrames": 326
         },
         {
           "id": "v2_s2",
-          "sceneTitle": "Heuristic Smart Jump & Overview",
-          "shortcutBadge": "Click  \u2022  Right-Click",
-          "caption": "Heuristic Smart Jump resolves unlinked labels like Figure 1, Theorem 1, or Citation 12. Right-click opens a floating Overview card.",
+          "sceneTitle": "Smart Jump & Keyboard Overview",
+          "shortcutBadge": ":  \u2022  Enter  \u2022  S  \u2022  Esc",
+          "caption": "Smart Jump resolves unlinked figures, theorems, and citations. Open an Overview card and press Enter to jump, S to split, or Escape to close.",
           "audioFile": "audio/v2_s2.mp3",
-          "audioSeconds": 11.892,
-          "durationInFrames": 363
+          "audioSeconds": 12.684,
+          "durationInFrames": 387
         },
         {
           "id": "v2_s3",
-          "sceneTitle": "Vimium 2-Letter Hints",
-          "shortcutBadge": ";  \u2022  :  \u2022  V",
-          "caption": "Stay completely keyboard-driven with Vimium two-letter hints. Semicolon jumps links, Colon opens Overview previews, and V selects text between two words.",
+          "sceneTitle": "Page Thumbnails Strip & 4-Col Grid",
+          "shortcutBadge": "\u21e7\u2318T  \u2022  \u2325\u2318T  \u2022  \u2318Click",
+          "caption": "Toggle the virtualized Page Thumbnails strip with Shift Command T, or open the four-column Thumbnail Grid with Option Command T to jump or Command-Enter split.",
           "audioFile": "audio/v2_s3.mp3",
-          "audioSeconds": 12.3,
-          "durationInFrames": 375
+          "audioSeconds": 10.092,
+          "durationInFrames": 309
         },
         {
           "id": "v2_s4",
-          "sceneTitle": "Auto-TOC, Regex Search & Marks",
-          "shortcutBadge": "T  \u2022  \u2318F  \u2022  m / `  \u2022  \u2318[",
-          "caption": "Explore with Auto-TOC on T, regex search via Command F, single-key marks with m and backtick, jump history, and Vim scrolling.",
+          "sceneTitle": "Vimium Hints, Auto-TOC & Space Scroll",
+          "shortcutBadge": "; / V  \u2022  T  \u2022  \u2318F  \u2022  Space",
+          "caption": "Navigate hands-free with two-letter Vimium hints, Auto-TOC on T, regex search on Command F, named marks, and Preview-style Spacebar screen scrolling.",
           "audioFile": "audio/v2_s4.mp3",
-          "audioSeconds": 10.62,
-          "durationInFrames": 325
+          "audioSeconds": 10.884,
+          "durationInFrames": 333
         }
       ]
     },
@@ -202,8 +202,8 @@
       "title": "SyncTeX, CLI IPC & Extensions",
       "subtitle": "Live LaTeX/Typst auto-reload, two-way SyncTeX, Unix socket IPC & shell extensions",
       "accent": "#22d3ee",
-      "totalFrames": 1331,
-      "durationSeconds": 44.37,
+      "totalFrames": 1292,
+      "durationSeconds": 43.07,
       "scenes": [
         {
           "id": "v5_s1",
@@ -227,19 +227,19 @@
           "id": "v5_s3",
           "sceneTitle": "Unix Domain Socket CLI IPC",
           "shortcutBadge": "--execute-command",
-          "caption": "Script live windows over a private Unix domain socket. Run execute-command from any terminal to jump pages, split panes, or run searches.",
+          "caption": "Script live windows over a Unix socket with execute-command to jump pages, toggle thumbnails, split panes, or run searches from any terminal.",
           "audioFile": "audio/v5_s3.mp3",
-          "audioSeconds": 10.189,
-          "durationInFrames": 312
+          "audioSeconds": 10.164,
+          "durationInFrames": 311
         },
         {
           "id": "v5_s4",
-          "sceneTitle": "Shell & Python Extensions",
-          "shortcutBadge": "\u21e7\u2318E",
-          "caption": "Press Shift Command E or custom hotkeys to run shell or Python extensions, safely passing selected quotes, DOIs, and paths to external workflows.",
+          "sceneTitle": "Extensions & About Pinleaf",
+          "shortcutBadge": "\u21e7\u2318E  \u2022  Pinleaf Menu",
+          "caption": "Run shell or Python extensions with Shift Command E, and click the top-left Pinleaf menu anytime to open About Pinleaf and copy your build version.",
           "audioFile": "audio/v5_s4.mp3",
-          "audioSeconds": 11.412,
-          "durationInFrames": 349
+          "audioSeconds": 10.14,
+          "durationInFrames": 311
         }
       ]
     }

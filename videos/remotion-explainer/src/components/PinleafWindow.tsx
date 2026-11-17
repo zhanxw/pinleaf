@@ -1,4 +1,5 @@
 import React from 'react';
+import { Img, staticFile } from 'remotion';
 import {
   AcademicPage,
   getThemePalette,
@@ -13,6 +14,8 @@ export interface PaneSpec {
   active?: boolean;
   portalFollower?: boolean;
   activePortalTarget?: string;
+  pagePrefix?: string;
+  autoScrollSpeed?: number;
   pageProps: AcademicPageProps;
 }
 
@@ -25,12 +28,30 @@ export interface TrailPillSpec {
 export interface PinleafWindowProps {
   title?: string;
   theme?: PinleafTheme;
+  dirty?: boolean;
   presentationMode?: boolean;
   splitAxis?: 'horizontal' | 'vertical';
   trailNodes?: TrailPillSpec[];
   panes: PaneSpec[];
   zoomLabel?: string;
   autoReloadEnabled?: boolean;
+  thumbnailsStrip?: {
+    activePage: number;
+    pages: Array<{ page: number; lockedTrail?: number; notes?: number; portals?: number }>;
+  };
+  thumbnailGridModal?: {
+    selectedPage: number;
+    pages: Array<{ page: number; section: string; lockedTrail?: number; notes?: number }>;
+  };
+  gotoPageModal?: {
+    query: string;
+    currentPage: number;
+    pageCount: number;
+  };
+  brandMenuOpen?: boolean;
+  aboutModal?: {
+    version: string;
+  };
   sidebar?: {
     activeFilter: string | null;
     items: Array<{
@@ -55,6 +76,7 @@ export interface PinleafWindowProps {
     xPercent: number;
     yPercent: number;
     scale?: number;
+    activeBtn?: 'jump' | 'split' | 'close';
   };
   tocOverlay?: {
     query: string;
@@ -76,15 +98,94 @@ export interface PinleafWindowProps {
   heightPx?: number;
 }
 
+const ToolbarBtn: React.FC<{
+  label: string;
+  active?: boolean;
+  amber?: boolean;
+}> = ({ label, active = false, amber = false }) => (
+  <div
+    style={{
+      padding: '5px 12px',
+      borderRadius: 6,
+      backgroundColor: amber ? '#d97706' : active ? '#2563eb' : '#27272a',
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: amber || active ? 800 : 600,
+      whiteSpace: 'nowrap',
+    }}
+  >
+    {label}
+  </div>
+);
+
+const MiniPageThumb: React.FC<{ page: number; dark?: boolean; lines?: number }> = ({
+  page,
+  dark = true,
+  lines = 5,
+}) => (
+  <div
+    style={{
+      width: '100%',
+      height: '100%',
+      backgroundColor: dark ? '#fafafa' : '#ffffff',
+      borderRadius: 4,
+      padding: '7px 8px',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between',
+      boxSizing: 'border-box',
+    }}
+  >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div
+        style={{
+          height: 5,
+          width: `${64 + ((page * 11) % 24)}%`,
+          borderRadius: 2,
+          backgroundColor: '#1e293b',
+        }}
+      />
+      {Array.from({ length: lines }).map((_, idx) => (
+        <div
+          key={idx}
+          style={{
+            height: 3,
+            width: `${74 + ((page * 7 + idx * 13) % 24)}%`,
+            borderRadius: 2,
+            backgroundColor: idx === 2 && page % 2 === 1 ? '#93c5fd' : '#cbd5e1',
+          }}
+        />
+      ))}
+    </div>
+    <div style={{ display: 'flex', gap: 4 }}>
+      <div
+        style={{
+          flex: 1,
+          height: page % 2 === 0 ? 20 : 12,
+          borderRadius: 3,
+          backgroundColor: page % 2 === 0 ? '#dbeafe' : '#e2e8f0',
+          border: page % 2 === 0 ? '1px solid #93c5fd' : 'none',
+        }}
+      />
+    </div>
+  </div>
+);
+
 export const PinleafWindow: React.FC<PinleafWindowProps> = ({
   title = 'Pinleaf — Attention_Preserving_Split_Graphs.pdf',
   theme = 'light',
+  dirty = false,
   presentationMode = false,
   splitAxis = 'horizontal',
   trailNodes,
   panes,
   zoomLabel = '118%',
   autoReloadEnabled = false,
+  thumbnailsStrip,
+  thumbnailGridModal,
+  gotoPageModal,
+  brandMenuOpen = false,
+  aboutModal,
   sidebar,
   commandPalette,
   overviewCard,
@@ -99,6 +200,9 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
 }) => {
   const pal = getThemePalette(theme);
   const darkChrome = theme === 'dark' || theme === 'custom';
+  const themeLabel = theme.charAt(0).toUpperCase() + theme.slice(1);
+  const notesCount = sidebar ? sidebar.items.length : 1;
+  const windowTitle = dirty && !title.endsWith('*') ? `${title} *` : title;
 
   if (presentationMode) {
     return (
@@ -163,7 +267,7 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
       {/* macOS Titlebar */}
       <div
         style={{
-          height: 40,
+          height: 38,
           backgroundColor: darkChrome ? '#1e293b' : '#f1f5f9',
           borderBottom: `1px solid ${pal.border}`,
           display: 'flex',
@@ -180,150 +284,468 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
         </div>
         <div
           style={{
-            fontSize: 18,
+            fontSize: 17.5,
             fontWeight: 700,
             color: darkChrome ? '#e2e8f0' : '#334155',
           }}
         >
-          {title}
+          {windowTitle}
         </div>
         <div style={{ width: 56 }} />
       </div>
 
-      {/* Pinleaf Toolbar */}
+      {/* Redesigned Compact Dark Toolbar */}
       <div
         style={{
-          height: 50,
-          backgroundColor: darkChrome ? '#111827' : '#ffffff',
-          borderBottom: `1px solid ${pal.border}`,
+          minHeight: 46,
+          backgroundColor: '#18181b',
+          borderBottom: '1px solid #27272a',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 16px',
-          fontSize: 17,
-          fontWeight: 700,
+          padding: '6px 14px',
+          gap: 10,
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          {['Sidebar', 'Search', 'TOC', 'Split ⌘D'].map((btn) => (
-            <div
-              key={btn}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 8,
-                backgroundColor: darkChrome ? '#1f2937' : '#f1f5f9',
-                color: darkChrome ? '#e2e8f0' : '#1e293b',
-                border: `1px solid ${pal.border}`,
-              }}
-            >
-              {btn}
-            </div>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '5px 12px',
+              borderRadius: 6,
+              backgroundColor: brandMenuOpen ? '#2563eb' : '#1e3a8a',
+              color: '#e0f2fe',
+              fontSize: 16.5,
+              fontWeight: 800,
+            }}
+          >
+            <Img
+              src={staticFile('pinleaf-icon.png')}
+              style={{ width: 20, height: 20, borderRadius: 4 }}
+            />
+            <span>Pinleaf</span>
+          </div>
+          <ToolbarBtn label="Open" />
+          <ToolbarBtn
+            label="Recent"
+            active={Boolean(libraryModal?.heading.includes('Recent'))}
+          />
+          {dirty && <ToolbarBtn label="Undo" />}
+          <ToolbarBtn label={dirty ? 'Save *' : 'Save'} amber={dirty} />
+
           {trailNodes && trailNodes.length > 0 && (
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 7,
-                marginLeft: 8,
-                padding: '4px 10px',
-                borderRadius: 9,
-                backgroundColor: darkChrome ? '#0f172a' : '#f8fafc',
-                border: `1px solid ${pal.border}`,
+                gap: 6,
+                marginLeft: 6,
+                padding: '3px 9px',
+                borderRadius: 7,
+                backgroundColor: '#09090b',
+                border: '1px solid #27272a',
               }}
             >
               {trailNodes.map((n, idx) => (
                 <React.Fragment key={n.id}>
-                  {idx > 0 && <span style={{ color: '#64748b' }}>→</span>}
+                  {idx > 0 && <span style={{ color: '#71717a', fontSize: 14 }}>→</span>}
                   <span
                     style={{
-                      padding: '3px 10px',
-                      borderRadius: 7,
+                      padding: '2px 8px',
+                      borderRadius: 5,
                       fontFamily: FONT_MONO,
-                      fontSize: 16,
+                      fontSize: 14.5,
                       fontWeight: 800,
                       backgroundColor: n.frozen
-                        ? 'rgba(245, 158, 11, 0.2)'
+                        ? '#f59e0b'
                         : n.active
-                        ? 'rgba(16, 185, 129, 0.22)'
-                        : 'rgba(148, 163, 184, 0.16)',
-                      color: n.frozen ? '#d97706' : n.active ? '#059669' : '#64748b',
-                      border: n.frozen
-                        ? '1.5px solid rgba(245, 158, 11, 0.5)'
-                        : n.active
-                        ? '1.5px solid rgba(16, 185, 129, 0.5)'
-                        : '1px solid transparent',
+                        ? '#2563eb'
+                        : '#27272a',
+                      color: n.frozen ? '#18181b' : '#ffffff',
                     }}
                   >
-                    #{n.id} {n.frozen ? '🔒 Frozen' : n.active ? '● Active' : ''}
+                    #{n.id} {n.frozen ? 'LOCK' : n.active ? 'ACTIVE' : ''}
                   </span>
                 </React.Fragment>
               ))}
             </div>
           )}
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {autoReloadEnabled && (
             <div
               style={{
-                padding: '5px 12px',
-                borderRadius: 8,
-                backgroundColor: 'rgba(34, 211, 238, 0.18)',
-                border: '1.5px solid rgba(34, 211, 238, 0.55)',
-                color: darkChrome ? '#67e8f9' : '#0e7490',
+                padding: '4px 10px',
+                borderRadius: 6,
+                backgroundColor: '#0e7490',
+                color: '#ecfeff',
                 fontFamily: FONT_MONO,
-                fontSize: 16,
+                fontSize: 14.5,
+                fontWeight: 700,
               }}
             >
-              ⟳ Auto-Reload ON
+              Auto-Reload ON
             </div>
           )}
-          <div
-            style={{
-              padding: '5px 12px',
-              borderRadius: 8,
-              backgroundColor: darkChrome ? '#1f2937' : '#f1f5f9',
-              color: darkChrome ? '#e2e8f0' : '#1e293b',
-              fontFamily: FONT_MONO,
-            }}
-          >
-            Theme: {theme.toUpperCase()}
-          </div>
-          <div
-            style={{
-              padding: '5px 12px',
-              borderRadius: 8,
-              backgroundColor: darkChrome ? '#1f2937' : '#f1f5f9',
-              color: darkChrome ? '#e2e8f0' : '#1e293b',
-              fontFamily: FONT_MONO,
-            }}
-          >
-            {zoomLabel}
-          </div>
-          <div
-            style={{
-              padding: '6px 14px',
-              borderRadius: 8,
-              backgroundColor: '#10b981',
-              color: '#064e3b',
-              fontWeight: 800,
-            }}
-          >
-            Save ⌘S
-          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ToolbarBtn
+            label="Pages"
+            active={Boolean(thumbnailsStrip || thumbnailGridModal)}
+          />
+          <ToolbarBtn label="TOC" active={Boolean(tocOverlay)} />
+          <ToolbarBtn label="Find" active={Boolean(searchBar)} />
+          <ToolbarBtn label={`Notes (${notesCount})`} active={Boolean(sidebar)} />
+          <ToolbarBtn label={themeLabel} active={theme !== 'light'} />
+          <ToolbarBtn label="/ Cmds" active={Boolean(commandPalette)} />
         </div>
       </div>
 
       {/* Main Content Body */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+        {/* Left Virtualized Thumbnail Strip */}
+        {thumbnailsStrip && (
+          <div
+            style={{
+              width: 210,
+              backgroundColor: '#18181b',
+              borderRight: '1px solid #27272a',
+              display: 'flex',
+              flexDirection: 'column',
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                height: 36,
+                padding: '0 12px',
+                borderBottom: '1px solid #27272a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: 13.5,
+                fontWeight: 800,
+                color: '#d4d4d8',
+              }}
+            >
+              <span>PAGES ({thumbnailsStrip.pages.length})</span>
+              <span style={{ color: '#a1a1aa' }}>x</span>
+            </div>
+            <div
+              style={{
+                flex: 1,
+                padding: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                overflow: 'hidden',
+              }}
+            >
+              {thumbnailsStrip.pages.map((tp) => {
+                const isActive = tp.page === thumbnailsStrip.activePage;
+                return (
+                  <div
+                    key={tp.page}
+                    style={{
+                      padding: 8,
+                      borderRadius: 8,
+                      backgroundColor: isActive ? '#1e3a8a55' : '#27272a',
+                      border: isActive ? '2px solid #3b82f6' : '1px solid #3f3f46',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ height: 112 }}>
+                      <MiniPageThumb page={tp.page} />
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: 13.5,
+                        fontFamily: FONT_MONO,
+                        fontWeight: 700,
+                        color: isActive ? '#93c5fd' : '#d4d4d8',
+                      }}
+                    >
+                      <span>p.{tp.page}</span>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {tp.lockedTrail && (
+                          <span
+                            style={{
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              backgroundColor: '#f59e0b',
+                              color: '#18181b',
+                              fontSize: 12,
+                              fontWeight: 800,
+                            }}
+                          >
+                            #{tp.lockedTrail} LOCK
+                          </span>
+                        )}
+                        {tp.notes && tp.notes > 0 && (
+                          <span
+                            style={{
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              backgroundColor: '#3f3f46',
+                              color: '#fde047',
+                              fontSize: 12,
+                            }}
+                          >
+                            {tp.notes}n
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div
+              style={{
+                padding: '6px 10px',
+                borderTop: '1px solid #27272a',
+                fontSize: 12.5,
+                color: '#a1a1aa',
+                textAlign: 'center',
+              }}
+            >
+              Click: Jump • Cmd+Click: Split
+            </div>
+          </div>
+        )}
+
+        {/* Panes Container + Overlaid Toast */}
+        <div
+          style={{
+            position: 'relative',
+            flex: 1,
+            display: 'flex',
+            flexDirection: splitAxis === 'vertical' ? 'column' : 'row',
+            gap: 10,
+            padding: 10,
+            overflow: 'hidden',
+          }}
+        >
+          {panes.map((pane, idx) => (
+            <div
+              key={idx}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                borderRadius: 10,
+                border: pane.frozen
+                  ? '2.5px solid #f59e0b'
+                  : pane.active
+                  ? '2.5px solid #3b82f6'
+                  : pane.portalFollower
+                  ? '2.5px solid #0ea5e9'
+                  : `1px solid ${pal.border}`,
+                backgroundColor: pal.canvasBg,
+                overflow: 'hidden',
+              }}
+            >
+              {/* Actual Pinleaf Pane Header */}
+              <div
+                style={{
+                  height: 38,
+                  backgroundColor: darkChrome ? '#18181b' : '#f4f4f5',
+                  borderBottom: `1px solid ${darkChrome ? '#27272a' : '#e4e4e7'}`,
+                  padding: '0 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 5,
+                      fontFamily: FONT_MONO,
+                      fontSize: 13.5,
+                      fontWeight: 800,
+                      backgroundColor: pane.frozen
+                        ? '#f59e0b'
+                        : pane.active
+                        ? '#2563eb'
+                        : '#e4e4e7',
+                      color: pane.frozen
+                        ? '#18181b'
+                        : pane.active
+                        ? '#ffffff'
+                        : '#27272a',
+                    }}
+                  >
+                    #{idx + 1} {pane.frozen ? 'LOCKED [F]' : 'Freeze [F]'}
+                  </span>
+
+                  {pane.portalFollower && (
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 5,
+                        backgroundColor: '#0369a1',
+                        color: '#e0f2fe',
+                        fontSize: 13.5,
+                        fontWeight: 700,
+                      }}
+                    >
+                      Portal [⇧P]{pane.activePortalTarget ? ` • ${pane.activePortalTarget}` : ''}
+                    </span>
+                  )}
+
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 5,
+                      fontFamily: FONT_MONO,
+                      fontSize: 13.5,
+                      backgroundColor: pane.pagePrefix ? '#1d4ed8' : '#e4e4e7',
+                      color: pane.pagePrefix ? '#ffffff' : '#18181b',
+                    }}
+                  >
+                    {pane.pagePrefix
+                      ? `Go: ${pane.pagePrefix}_ (${pane.pageProps.pageNumber}/8)`
+                      : `p.${pane.pageProps.pageNumber}/8`}
+                  </span>
+
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 5,
+                      fontFamily: FONT_MONO,
+                      fontSize: 13.5,
+                      backgroundColor: '#e4e4e7',
+                      color: '#27272a',
+                    }}
+                  >
+                    {zoomLabel}
+                  </span>
+
+                  <span
+                    style={{
+                      color: darkChrome ? '#e4e4e7' : '#3f3f46',
+                      fontSize: 14,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {pane.label}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {pane.autoScrollSpeed && (
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 5,
+                        fontFamily: FONT_MONO,
+                        fontSize: 13.5,
+                        backgroundColor: '#047857',
+                        color: '#ffffff',
+                      }}
+                    >
+                      Auto {pane.autoScrollSpeed}px/s
+                    </span>
+                  )}
+                  {['Split R', 'Split D', 'x'].map((b) => (
+                    <span
+                      key={b}
+                      style={{
+                        padding: '2px 7px',
+                        borderRadius: 5,
+                        backgroundColor: '#e4e4e7',
+                        color: '#27272a',
+                        fontSize: 13,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {b}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ flex: 1, padding: '8px 6px', overflow: 'hidden' }}>
+                <AcademicPage {...pane.pageProps} theme={pane.pageProps.theme ?? theme} />
+              </div>
+            </div>
+          ))}
+
+          {/* Floating Bottom-Right Toast inside Canvas */}
+          {statusBanner && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 16,
+                right: 16,
+                padding: '9px 16px',
+                borderRadius: 9,
+                backgroundColor:
+                  statusBanner.tone === 'ok' ? '#14532d' : '#18181b',
+                border:
+                  statusBanner.tone === 'ok'
+                    ? '1.5px solid #22c55e'
+                    : '1.5px solid #52525b',
+                color: '#ffffff',
+                fontFamily: FONT_MONO,
+                fontSize: 17,
+                fontWeight: 700,
+                boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                zIndex: 20,
+              }}
+            >
+              <span>{statusBanner.text}</span>
+              <span style={{ color: '#d4d4d8', fontSize: 15 }}>x</span>
+            </div>
+          )}
+
+          {/* KeyPress Callout (Bottom-Left) */}
+          {keyPressChip && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 16,
+                left: 16,
+                padding: '9px 16px',
+                borderRadius: 10,
+                backgroundColor: 'rgba(2, 6, 23, 0.94)',
+                border: '2px solid #34d399',
+                fontFamily: FONT_MONO,
+                fontSize: 19,
+                fontWeight: 800,
+                color: '#34d399',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+                zIndex: 20,
+              }}
+            >
+              {keyPressChip}
+            </div>
+          )}
+        </div>
+
+        {/* Right Notes & Categories Sidebar */}
         {sidebar && (
           <div
             style={{
-              width: 460,
+              width: 440,
               backgroundColor: darkChrome ? '#0f172a' : '#f8fafc',
-              borderRight: `1px solid ${pal.border}`,
+              borderLeft: `1px solid ${pal.border}`,
               padding: 16,
               display: 'flex',
               flexDirection: 'column',
@@ -406,14 +828,14 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                     </span>
                     <span style={{ color: pal.textMuted }}>p. {item.page}</span>
                   </div>
-                  <div style={{ fontSize: 17, color: pal.textPrimary, lineHeight: 1.35 }}>
+                  <div style={{ fontSize: 16.5, color: pal.textPrimary, lineHeight: 1.35 }}>
                     “{item.quote}”
                   </div>
                   {item.note && (
                     <div
                       style={{
                         marginTop: 5,
-                        fontSize: 15.5,
+                        fontSize: 15,
                         color: pal.textMuted,
                         fontStyle: 'italic',
                       }}
@@ -426,101 +848,6 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
             </div>
           </div>
         )}
-
-        {/* Panes Container */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: splitAxis === 'vertical' ? 'column' : 'row',
-            gap: 12,
-            padding: 12,
-            overflow: 'hidden',
-          }}
-        >
-          {panes.map((pane, idx) => (
-            <div
-              key={idx}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                borderRadius: 11,
-                border: pane.active
-                  ? '2.5px solid #10b981'
-                  : pane.frozen
-                  ? '2.5px solid #f59e0b'
-                  : pane.portalFollower
-                  ? '2.5px solid #38bdf8'
-                  : `1px solid ${pal.border}`,
-                backgroundColor: pal.canvasBg,
-                overflow: 'hidden',
-              }}
-            >
-              {/* Pane mini-header */}
-              <div
-                style={{
-                  height: 38,
-                  backgroundColor: darkChrome ? '#0f172a' : '#e2e8f0',
-                  padding: '0 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: 16.5,
-                  fontWeight: 800,
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{ color: pal.heading }}>{pane.label}</span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {pane.frozen && (
-                    <span
-                      style={{
-                        padding: '2px 9px',
-                        borderRadius: 999,
-                        backgroundColor: 'rgba(245, 158, 11, 0.24)',
-                        color: '#b45309',
-                        fontSize: 15,
-                      }}
-                    >
-                      🔒 FROZEN
-                    </span>
-                  )}
-                  {pane.portalFollower && (
-                    <span
-                      style={{
-                        padding: '2px 10px',
-                        borderRadius: 999,
-                        backgroundColor: 'rgba(56, 189, 248, 0.25)',
-                        color: darkChrome ? '#7dd3fc' : '#0369a1',
-                        fontSize: 15.5,
-                      }}
-                    >
-                      ⇄ Portal Follower{pane.activePortalTarget ? ` • ${pane.activePortalTarget}` : ''}
-                    </span>
-                  )}
-                  {pane.active && !pane.frozen && !pane.portalFollower && (
-                    <span
-                      style={{
-                        padding: '2px 9px',
-                        borderRadius: 999,
-                        backgroundColor: 'rgba(16, 185, 129, 0.24)',
-                        color: '#047857',
-                        fontSize: 15,
-                      }}
-                    >
-                      ACTIVE
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ flex: 1, padding: '8px 6px', overflow: 'hidden' }}>
-                <AcademicPage {...pane.pageProps} theme={pane.pageProps.theme ?? theme} />
-              </div>
-            </div>
-          ))}
-        </div>
 
         {/* Search Bar Overlay */}
         {searchBar && (
@@ -559,7 +886,7 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
               transform: 'translateX(-50%)',
               width: 1020,
               borderRadius: 16,
-              backgroundColor: 'rgba(15, 23, 42, 0.97)',
+              backgroundColor: 'rgba(24, 24, 27, 0.97)',
               border: '2px solid rgba(96, 165, 250, 0.72)',
               boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65)',
               padding: 20,
@@ -573,11 +900,11 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 justifyContent: 'space-between',
                 padding: '11px 16px',
                 borderRadius: 10,
-                backgroundColor: '#020617',
-                border: '1.5px solid #334155',
+                backgroundColor: '#09090b',
+                border: '1.5px solid #3f3f46',
                 marginBottom: 14,
                 fontFamily: FONT_MONO,
-                fontSize: 23,
+                fontSize: 22,
                 fontWeight: 700,
               }}
             >
@@ -586,7 +913,9 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 {commandPalette.query}
                 <span style={{ color: '#60a5fa' }}>|</span>
               </span>
-              <span style={{ fontSize: 16, color: '#94a3b8' }}>Esc to close</span>
+              <span style={{ fontSize: 15.5, color: '#a1a1aa' }}>
+                Up/Down Navigate · Enter Run · Esc Close
+              </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {commandPalette.items.map((item, i) => {
@@ -621,11 +950,11 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                     <span
                       style={{
                         fontFamily: FONT_MONO,
-                        fontSize: 19,
+                        fontSize: 18,
                         fontWeight: 800,
                         padding: '4px 12px',
                         borderRadius: 7,
-                        backgroundColor: '#1e293b',
+                        backgroundColor: '#27272a',
                         color: '#fbbf24',
                       }}
                     >
@@ -634,6 +963,178 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Go-to-Page Modal */}
+        {gotoPageModal && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(9, 9, 11, 0.45)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'flex-start',
+              paddingTop: 72,
+              zIndex: 24,
+            }}
+          >
+            <div
+              style={{
+                width: 480,
+                borderRadius: 12,
+                backgroundColor: '#18181b',
+                border: '2px solid #3f3f46',
+                boxShadow: '0 22px 54px rgba(0, 0, 0, 0.65)',
+                padding: 18,
+                color: '#f4f4f5',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 20, fontWeight: 800, color: '#ffffff' }}>Go to Page</span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 14.5, color: '#a1a1aa' }}>
+                  Enter Jump · Cmd+Enter Split · Esc
+                </span>
+              </div>
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  backgroundColor: '#09090b',
+                  border: '1.5px solid #2563eb',
+                  fontFamily: FONT_MONO,
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: gotoPageModal.query ? '#ffffff' : '#71717a',
+                }}
+              >
+                {gotoPageModal.query
+                  ? `${gotoPageModal.query}|`
+                  : `Page 1–${gotoPageModal.pageCount} (now ${gotoPageModal.currentPage})|`}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4-Column Thumbnail Grid Overview Modal */}
+        {thumbnailGridModal && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(9, 9, 11, 0.6)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 24,
+            }}
+          >
+            <div
+              style={{
+                width: 1120,
+                borderRadius: 14,
+                backgroundColor: '#18181b',
+                border: '2px solid #3f3f46',
+                boxShadow: '0 28px 72px rgba(0, 0, 0, 0.72)',
+                overflow: 'hidden',
+                color: '#f4f4f5',
+              }}
+            >
+              <div
+                style={{
+                  padding: '12px 18px',
+                  borderBottom: '1px solid #27272a',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <span style={{ fontSize: 20, fontWeight: 800, color: '#ffffff' }}>
+                  Page Overview ({thumbnailGridModal.pages.length} pages)
+                </span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 15, color: '#a1a1aa' }}>
+                  Arrows/hjkl Move · Enter Jump · Cmd+Enter Split · Esc Close
+                </span>
+              </div>
+              <div
+                style={{
+                  padding: 16,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: 14,
+                }}
+              >
+                {thumbnailGridModal.pages.map((tp) => {
+                  const selected = tp.page === thumbnailGridModal.selectedPage;
+                  return (
+                    <div
+                      key={tp.page}
+                      style={{
+                        padding: 10,
+                        borderRadius: 10,
+                        backgroundColor: selected ? '#1e3a8a66' : '#27272a',
+                        border: selected ? '2.5px solid #3b82f6' : '1px solid #3f3f46',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ height: 150 }}>
+                        <MiniPageThumb page={tp.page} lines={6} />
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontSize: 15,
+                          fontWeight: 700,
+                        }}
+                      >
+                        <span style={{ color: selected ? '#93c5fd' : '#f4f4f5' }}>
+                          p.{tp.page} · {tp.section}
+                        </span>
+                        <div style={{ display: 'flex', gap: 5 }}>
+                          {tp.lockedTrail && (
+                            <span
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                backgroundColor: '#f59e0b',
+                                color: '#18181b',
+                                fontFamily: FONT_MONO,
+                                fontSize: 12.5,
+                                fontWeight: 800,
+                              }}
+                            >
+                              #{tp.lockedTrail} LOCK
+                            </span>
+                          )}
+                          {tp.notes && tp.notes > 0 && (
+                            <span
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                backgroundColor: '#3f3f46',
+                                color: '#fde047',
+                                fontFamily: FONT_MONO,
+                                fontSize: 12.5,
+                              }}
+                            >
+                              {tp.notes}n
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -783,21 +1284,180 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
           </div>
         )}
 
-        {/* Floating Overview Card */}
+        {/* Top-Left [Pinleaf] Dropdown Menu */}
+        {brandMenuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 4,
+              left: 14,
+              width: 280,
+              borderRadius: 10,
+              backgroundColor: '#18181b',
+              border: '1.5px solid #3f3f46',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.65)',
+              padding: '6px 0',
+              color: '#f4f4f5',
+              fontSize: 16.5,
+              zIndex: 28,
+            }}
+          >
+            {[
+              { label: 'About Pinleaf', hint: 'v0.2.2', highlight: true },
+              null,
+              { label: 'Open Built-in Demo', hint: '' },
+              { label: 'Save PDF As...', hint: '' },
+              { label: 'Commands & Shortcuts', hint: '/' },
+              null,
+              { label: 'Quit Pinleaf', hint: 'Cmd+Q' },
+            ].map((item, idx) =>
+              item === null ? (
+                <div key={idx} style={{ height: 1, margin: '5px 0', backgroundColor: '#27272a' }} />
+              ) : (
+                <div
+                  key={item.label}
+                  style={{
+                    padding: '8px 14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    backgroundColor: item.highlight ? '#27272a' : 'transparent',
+                    fontWeight: item.highlight ? 700 : 500,
+                  }}
+                >
+                  <span>{item.label}</span>
+                  {item.hint && (
+                    <span style={{ fontFamily: FONT_MONO, fontSize: 14.5, color: '#a1a1aa' }}>
+                      {item.hint}
+                    </span>
+                  )}
+                </div>
+              ),
+            )}
+          </div>
+        )}
+
+        {/* Centered About Pinleaf Modal */}
+        {aboutModal && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(9, 9, 11, 0.56)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 28,
+            }}
+          >
+            <div
+              style={{
+                width: 480,
+                borderRadius: 14,
+                backgroundColor: '#18181b',
+                border: '1.5px solid #3f3f46',
+                boxShadow: '0 28px 70px rgba(0, 0, 0, 0.72)',
+                overflow: 'hidden',
+                color: '#f4f4f5',
+              }}
+            >
+              <div
+                style={{
+                  padding: '10px 16px',
+                  borderBottom: '1px solid #27272a',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: 16,
+                }}
+              >
+                <span style={{ fontWeight: 800, color: '#ffffff' }}>About Pinleaf</span>
+                <span
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 5,
+                    backgroundColor: '#27272a',
+                    color: '#e4e4e7',
+                    fontSize: 14.5,
+                  }}
+                >
+                  Close [Esc]
+                </span>
+              </div>
+              <div
+                style={{
+                  padding: '24px 28px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <Img
+                  src={staticFile('pinleaf-icon.png')}
+                  style={{ width: 68, height: 68, borderRadius: 14 }}
+                />
+                <div style={{ fontSize: 26, fontWeight: 800, color: '#ffffff' }}>Pinleaf</div>
+                <div
+                  style={{
+                    padding: '4px 14px',
+                    borderRadius: 6,
+                    backgroundColor: '#1e3a8a',
+                    color: '#e0f2fe',
+                    fontFamily: FONT_MONO,
+                    fontSize: 16,
+                    fontWeight: 700,
+                  }}
+                >
+                  Version {aboutModal.version} (aarch64-macos)
+                </div>
+                <div style={{ fontSize: 16.5, color: '#d4d4d8', marginTop: 4 }}>
+                  Freeze-and-branch multi-view academic PDF reader
+                </div>
+                <div style={{ fontSize: 15, color: '#a1a1aa' }}>
+                  Pure Rust + Metal GPU  |  gpui-ce  |  hayro  |  lopdf
+                </div>
+              </div>
+              <div
+                style={{
+                  padding: '12px 18px',
+                  borderTop: '1px solid #27272a',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 10,
+                  fontSize: 15.5,
+                  fontWeight: 700,
+                }}
+              >
+                <span style={{ padding: '6px 12px', borderRadius: 6, backgroundColor: '#27272a' }}>
+                  Copy Version
+                </span>
+                <span style={{ padding: '6px 12px', borderRadius: 6, backgroundColor: '#27272a' }}>
+                  GitHub
+                </span>
+                <span style={{ padding: '6px 16px', borderRadius: 6, backgroundColor: '#2563eb' }}>
+                  OK
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Floating Overview Card with Keyboard Shortcut Buttons */}
         {overviewCard && (
           <div
             style={{
               position: 'absolute',
               left: `${overviewCard.xPercent}%`,
               top: `${overviewCard.yPercent}%`,
-              width: 560,
+              width: 620,
               transform: `scale(${overviewCard.scale ?? 1})`,
-              borderRadius: 14,
-              backgroundColor: 'rgba(15, 23, 42, 0.97)',
-              border: '2px solid #60a5fa',
+              borderRadius: 12,
+              backgroundColor: '#18181b',
+              border: '2px solid #3b82f6',
               boxShadow: '0 22px 54px rgba(0,0,0,0.62)',
-              padding: 18,
-              color: '#f8fafc',
+              overflow: 'hidden',
+              color: '#f4f4f5',
               zIndex: 15,
             }}
           >
@@ -806,89 +1466,72 @@ export const PinleafWindow: React.FC<PinleafWindowProps> = ({
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: 10,
+                gap: 10,
+                padding: '9px 14px',
+                borderBottom: '1px solid #27272a',
               }}
             >
-              <span style={{ fontSize: 19, fontWeight: 800, color: '#93c5fd' }}>
-                Overview • {overviewCard.title}
+              <span style={{ fontSize: 17, fontWeight: 700, color: '#f4f4f5' }}>
+                Overview: {overviewCard.title} ({overviewCard.pageLabel})
               </span>
-              <span
-                style={{
-                  fontFamily: FONT_MONO,
-                  fontSize: 16,
-                  fontWeight: 700,
-                  padding: '3px 9px',
-                  borderRadius: 6,
-                  backgroundColor: '#1e293b',
-                }}
-              >
-                {overviewCard.pageLabel}
-              </span>
+              <div style={{ display: 'flex', gap: 6, fontSize: 14.5, fontWeight: 700 }}>
+                <span
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: 5,
+                    backgroundColor: '#2563eb',
+                    border:
+                      overviewCard.activeBtn === 'jump'
+                        ? '1.5px solid #93c5fd'
+                        : '1.5px solid transparent',
+                    color: '#ffffff',
+                  }}
+                >
+                  Jump [Enter]
+                </span>
+                <span
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: 5,
+                    backgroundColor: overviewCard.activeBtn === 'split' ? '#0ea5e9' : '#27272a',
+                    border:
+                      overviewCard.activeBtn === 'split'
+                        ? '1.5px solid #bae6fd'
+                        : '1.5px solid transparent',
+                    color: '#ffffff',
+                  }}
+                >
+                  Split [S]
+                </span>
+                <span
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: 5,
+                    backgroundColor: '#3f3f46',
+                    border:
+                      overviewCard.activeBtn === 'close'
+                        ? '1.5px solid #e4e4e7'
+                        : '1.5px solid transparent',
+                    color: '#ffffff',
+                  }}
+                >
+                  x [Esc]
+                </span>
+              </div>
             </div>
             <div
               style={{
-                fontSize: 18.5,
+                fontSize: 18,
                 lineHeight: 1.45,
-                color: '#f1f5f9',
-                padding: 12,
-                borderRadius: 9,
-                backgroundColor: '#020617',
-                border: '1px solid #334155',
+                color: '#18181b',
+                margin: 8,
+                padding: 14,
+                borderRadius: 8,
+                backgroundColor: '#ffffff',
               }}
             >
               {overviewCard.snippet}
             </div>
-          </div>
-        )}
-
-        {/* KeyPress Callout + Status Banner */}
-        {keyPressChip && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 16,
-              left: sidebar ? 478 : 18,
-              padding: '9px 16px',
-              borderRadius: 11,
-              backgroundColor: 'rgba(2, 6, 23, 0.94)',
-              border: '2px solid #34d399',
-              fontFamily: FONT_MONO,
-              fontSize: 20,
-              fontWeight: 800,
-              color: '#34d399',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-              zIndex: 20,
-            }}
-          >
-            {keyPressChip}
-          </div>
-        )}
-
-        {statusBanner && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 16,
-              right: 18,
-              padding: '9px 16px',
-              borderRadius: 11,
-              backgroundColor:
-                statusBanner.tone === 'ok'
-                  ? 'rgba(6, 78, 59, 0.96)'
-                  : 'rgba(15, 23, 42, 0.96)',
-              border:
-                statusBanner.tone === 'ok'
-                  ? '2px solid #34d399'
-                  : '2px solid rgba(148,163,184,0.5)',
-              color: '#f8fafc',
-              fontFamily: FONT_MONO,
-              fontSize: 18.5,
-              fontWeight: 700,
-              boxShadow: '0 8px 26px rgba(0,0,0,0.45)',
-              zIndex: 20,
-            }}
-          >
-            {statusBanner.text}
           </div>
         )}
 

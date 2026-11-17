@@ -4780,7 +4780,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pinleaf"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "dirs",
@@ -4806,7 +4806,7 @@ dependencies = [
 
 [[package]]
 name = "pinleaf-annot"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "lopdf",
@@ -4818,7 +4818,7 @@ dependencies = [
 
 [[package]]
 name = "pinleaf-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -4827,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "pinleaf-engine"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "compact_str",

@@ -24,7 +24,9 @@ use pinleaf_core::{
 };
 use pinleaf_engine::{SyncTexMap, extract_page_text, render_page_bgra};
 
-use crate::actions::{NewWindow, OpenFile, QuitApp, install_app_menus, register_keybindings};
+use crate::actions::{
+    NewWindow, OpenFile, QuitApp, ShowAbout, install_app_menus, register_keybindings,
+};
 use crate::app_state::AppRegistry;
 use crate::ipc::{
     IpcInbox, IpcRequest, default_ipc_socket_path, send_ipc_request, start_ipc_listener,
@@ -201,9 +203,9 @@ fn open_session_in_window(
     .ok()
 }
 
-pub(crate) fn open_demo_window(cx: &mut App) {
+pub(crate) fn open_demo_window(cx: &mut App) -> Option<WindowHandle<WindowWorkspace>> {
     let session_model = DocumentSession::open_demo().expect("demo PDF loads");
-    let _ = open_session_in_window(session_model, cx);
+    open_session_in_window(session_model, cx)
 }
 
 pub(crate) fn open_pdf_in_new_window(
@@ -481,6 +483,16 @@ USAGE:\n  \
                 cx.on_action(|_: &QuitApp, cx| {
                     cx.quit();
                 });
+                cx.on_action(|_: &ShowAbout, cx| {
+                    if cx.windows().is_empty()
+                        && let Some(ws) = open_demo_window(cx)
+                    {
+                        let _ = ws.update(cx, |ws, window, cx| {
+                            ws.open_about_popup(window, cx);
+                        });
+                        cx.activate(true);
+                    }
+                });
                 cx.on_action(|_: &NewWindow, cx| {
                     open_demo_window(cx);
                     cx.activate(true);
@@ -690,8 +702,19 @@ Postamble:\n",
     let p33 = (3 * 4 + 3) * 4;
     assert_eq!(&px_buf[p33..p33 + 4], &[255, 255, 255, 255]);
 
+    // Verify thumbnail scaling & Command Palette page-jump parsing
+    let thumb_s = crate::session::thumbnail_scale_for_page(612.0, 792.0);
+    assert!(thumb_s > 0.1 && thumb_s < 1.0);
+    assert_eq!(crate::command_popup::parse_page_jump_query("14", 20), Some(14));
+    assert_eq!(
+        crate::command_popup::parse_page_jump_query("page 5", 5),
+        Some(5)
+    );
+    assert_eq!(crate::command_popup::parse_page_jump_query("6", 5), Some(5));
+    assert_eq!(crate::command_popup::parse_page_jump_query("0", 5), None);
+
     println!(
-        "self-test ok: {} pages, rendered {}x{} BGRA, {} TOC entries, freeze trail, smart jump, portals, hints, synctex & custom smart theme verified",
+        "self-test ok: {} pages, rendered {}x{} BGRA, {} TOC entries, freeze trail, smart jump, portals, hints, synctex, thumbnails & custom smart theme verified",
         session.page_count(),
         frame.width,
         frame.height,

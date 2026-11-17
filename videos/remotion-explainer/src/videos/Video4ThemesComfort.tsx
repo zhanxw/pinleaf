@@ -170,6 +170,7 @@ const Scene3ComfortRulerAutoScroll: React.FC = () => {
         {
           label: fitContent ? 'Fit Content Width • Margins Cropped' : 'Standard Fit Page',
           active: true,
+          autoScrollSpeed: scrolling ? 90 : undefined,
           pageProps: {
             pageNumber: 2,
             focusSection: 'intro',

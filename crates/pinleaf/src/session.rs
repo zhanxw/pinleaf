@@ -151,6 +151,67 @@ pub struct TileCacheKey {
     pub custom_bg_fg: ([u8; 3], [u8; 3]),
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ThumbCacheKey {
+    pub page: PageIndex,
+    pub color_mode: ColorMode,
+    pub preserve_figures: bool,
+    pub custom_bg_fg: ([u8; 3], [u8; 3]),
+}
+
+/// Target thumbnail rasterization scale capped for crisp ~240 px max dimension thumbnails.
+pub fn thumbnail_scale_for_page(norm_w: f32, norm_h: f32) -> f32 {
+    (240.0 / norm_w.max(norm_h).max(1.0)).clamp(0.12, 0.5)
+}
+
+fn render_styled_page_bgra(
+    handle: &PdfDocumentHandle,
+    page: PageIndex,
+    scale: f32,
+    norm_w: f32,
+    norm_h: f32,
+    mode: ColorMode,
+    preserve_figures: bool,
+    custom_bg_fg: ([u8; 3], [u8; 3]),
+    cached_rects: Option<Arc<Vec<NormRect>>>,
+) -> std::result::Result<(u32, u32, Vec<u8>, Option<Arc<Vec<NormRect>>>), pinleaf_engine::EngineError> {
+    let mut frame = render_page_bgra(handle, page, scale)?;
+    let computed_rects = if preserve_figures {
+        Some(cached_rects.unwrap_or_else(|| Arc::new(extract_page_image_rects(handle, page))))
+    } else {
+        None
+    };
+
+    let px_rects: Vec<[u32; 4]> = computed_rects
+        .as_deref()
+        .map(|rects| {
+            let sx = frame.width as f32 / norm_w.max(1.0);
+            let sy = frame.height as f32 / norm_h.max(1.0);
+            rects
+                .iter()
+                .map(|r| {
+                    [
+                        (r.min_x * sx).floor().clamp(0.0, frame.width as f32) as u32,
+                        (r.min_y * sy).floor().clamp(0.0, frame.height as f32) as u32,
+                        (r.max_x * sx).ceil().clamp(0.0, frame.width as f32) as u32,
+                        (r.max_y * sy).ceil().clamp(0.0, frame.height as f32) as u32,
+                    ]
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    apply_color_mode_bgra_with_rects(
+        &mut frame.pixels_bgra,
+        frame.width,
+        frame.height,
+        mode,
+        custom_bg_fg,
+        &px_rects,
+    );
+    Ok((frame.width, frame.height, frame.pixels_bgra, computed_rects))
+}
+
 /// Quantizes continuous zoom scale into ~19% exponential buckets (`2^(bucket / 4)`) so
 /// scrolling/splitting reuses cached page textures efficiently without blurriness.
 pub fn scale_to_zoom_bucket(scale: f32) -> i16 {
@@ -182,6 +243,8 @@ pub struct DocumentSession {
     pub toc_entries: Vec<TocEntry>,
     bitmap_cache: LruCache<TileCacheKey, Arc<RenderImage>>,
     in_flight_renders: HashSet<TileCacheKey>,
+    thumb_cache: LruCache<ThumbCacheKey, Arc<RenderImage>>,
+    in_flight_thumbs: HashSet<ThumbCacheKey>,
     text_cache: LruCache<PageIndex, Arc<PageTextLayout>>,
     content_bounds_cache: HashMap<PageIndex, (f32, f32)>,
     image_rects_cache: HashMap<PageIndex, Arc<Vec<NormRect>>>,
@@ -254,6 +317,8 @@ impl DocumentSession {
             toc_entries,
             bitmap_cache: LruCache::new(NonZeroUsize::new(72).unwrap()),
             in_flight_renders: HashSet::new(),
+            thumb_cache: LruCache::new(NonZeroUsize::new(256).unwrap()),
+            in_flight_thumbs: HashSet::new(),
             text_cache: LruCache::new(NonZeroUsize::new(64).unwrap()),
             content_bounds_cache: HashMap::new(),
             image_rects_cache: HashMap::new(),
@@ -349,58 +414,27 @@ impl DocumentSession {
         cx.spawn(async move |session, cx| {
             let rendered = cx
                 .background_spawn(async move {
-                    let mut frame = render_page_bgra(&handle, page, scale)?;
-                    let computed_rects = if preserve_figures {
-                        match cached_image_rects {
-                            Some(existing) => Some(existing),
-                            None => Some(Arc::new(extract_page_image_rects(&handle, page))),
-                        }
-                    } else {
-                        None
-                    };
-
-                    let px_rects: Vec<[u32; 4]> = computed_rects
-                        .as_deref()
-                        .map(|rects| {
-                            let sx = frame.width as f32 / norm_w.max(1.0);
-                            let sy = frame.height as f32 / norm_h.max(1.0);
-                            rects
-                                .iter()
-                                .map(|r| {
-                                    [
-                                        (r.min_x * sx).floor().clamp(0.0, frame.width as f32) as u32,
-                                        (r.min_y * sy).floor().clamp(0.0, frame.height as f32)
-                                            as u32,
-                                        (r.max_x * sx).ceil().clamp(0.0, frame.width as f32) as u32,
-                                        (r.max_y * sy).ceil().clamp(0.0, frame.height as f32)
-                                            as u32,
-                                    ]
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    apply_color_mode_bgra_with_rects(
-                        &mut frame.pixels_bgra,
-                        frame.width,
-                        frame.height,
+                    render_styled_page_bgra(
+                        &handle,
+                        page,
+                        scale,
+                        norm_w,
+                        norm_h,
                         mode,
+                        preserve_figures,
                         custom_bg_fg,
-                        &px_rects,
-                    );
-                    Ok::<_, pinleaf_engine::EngineError>((frame, computed_rects))
+                        cached_image_rects,
+                    )
                 })
                 .await;
 
             let _ = session.update(cx, |session, cx| {
                 session.in_flight_renders.remove(&key);
-                if let Ok((frame, computed_rects)) = rendered {
+                if let Ok((width, height, pixels_bgra, computed_rects)) = rendered {
                     if let Some(rects) = computed_rects {
                         session.image_rects_cache.insert(page, rects);
                     }
-                    if let Some(rgba_buf) =
-                        RgbaImage::from_raw(frame.width, frame.height, frame.pixels_bgra)
-                    {
+                    if let Some(rgba_buf) = RgbaImage::from_raw(width, height, pixels_bgra) {
                         let img = Arc::new(RenderImage::new(vec![Frame::new(rgba_buf)]));
                         if let Some((old_key, evicted)) = session.bitmap_cache.push(key, img)
                             && old_key != key
@@ -413,6 +447,76 @@ impl DocumentSession {
             });
         })
         .detach();
+    }
+
+    pub fn get_or_request_thumbnail(
+        &mut self,
+        page: PageIndex,
+        cx: &mut Context<Self>,
+    ) -> Option<Arc<RenderImage>> {
+        let mode = self.color_mode;
+        let preserve_figures =
+            self.smart_dark_mode && matches!(mode, ColorMode::Dark | ColorMode::Custom);
+        let custom_bg_fg = (self.custom_bg_rgb, self.custom_fg_rgb);
+        let key = ThumbCacheKey {
+            page,
+            color_mode: mode,
+            preserve_figures,
+            custom_bg_fg,
+        };
+        if let Some(img) = self.thumb_cache.get(&key) {
+            return Some(img.clone());
+        }
+        if self.in_flight_thumbs.contains(&key) || self.in_flight_thumbs.len() >= 8 {
+            return None;
+        }
+        self.in_flight_thumbs.insert(key);
+        let handle = self.pdf_handle.clone();
+        let (norm_w, norm_h) = self
+            .page_metas
+            .get(page.as_usize())
+            .map(|m| (m.norm_width, m.norm_height))
+            .unwrap_or((612.0, 792.0));
+        let scale = thumbnail_scale_for_page(norm_w, norm_h);
+        let cached_image_rects = self.image_rects_cache.get(&page).cloned();
+
+        cx.spawn(async move |session, cx| {
+            let rendered = cx
+                .background_spawn(async move {
+                    render_styled_page_bgra(
+                        &handle,
+                        page,
+                        scale,
+                        norm_w,
+                        norm_h,
+                        mode,
+                        preserve_figures,
+                        custom_bg_fg,
+                        cached_image_rects,
+                    )
+                })
+                .await;
+
+            let _ = session.update(cx, |session, cx| {
+                session.in_flight_thumbs.remove(&key);
+                if let Ok((width, height, pixels_bgra, computed_rects)) = rendered {
+                    if let Some(rects) = computed_rects {
+                        session.image_rects_cache.insert(page, rects);
+                    }
+                    if let Some(rgba_buf) = RgbaImage::from_raw(width, height, pixels_bgra) {
+                        let img = Arc::new(RenderImage::new(vec![Frame::new(rgba_buf)]));
+                        if let Some((old_key, evicted)) = session.thumb_cache.push(key, img)
+                            && old_key != key
+                        {
+                            cx.drop_image(evicted, None);
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        None
     }
 
     pub fn ensure_text_layout(&mut self, page: PageIndex) -> Arc<PageTextLayout> {
@@ -837,6 +941,10 @@ impl DocumentSession {
             cx.drop_image(img, None);
         }
         self.in_flight_renders.clear();
+        while let Some((_, img)) = self.thumb_cache.pop_lru() {
+            cx.drop_image(img, None);
+        }
+        self.in_flight_thumbs.clear();
         self.text_cache.clear();
         self.content_bounds_cache.clear();
         self.image_rects_cache.clear();
@@ -1022,5 +1130,23 @@ mod tests {
         assert_eq!(&preserved[0..4], &[0x2e, 0x1e, 0x1e, 255]);
         assert_eq!(&preserved[4..8], &[40, 200, 30, 255]);
         assert_eq!(&preserved[8..12], &[0xf4, 0xd6, 0xcd, 255]);
+    }
+
+    #[test]
+    fn thumbnail_scale_for_page_bounds_aspect_ratios() {
+        let letter = thumbnail_scale_for_page(612.0, 792.0);
+        assert!((letter - 240.0 / 792.0).abs() < 1e-4);
+
+        let a4 = thumbnail_scale_for_page(595.0, 842.0);
+        assert!((a4 - 240.0 / 842.0).abs() < 1e-4);
+
+        let wide_slide = thumbnail_scale_for_page(1920.0, 1080.0);
+        assert!((wide_slide - 0.125).abs() < 1e-4);
+
+        let huge_poster = thumbnail_scale_for_page(5000.0, 4000.0);
+        assert_eq!(huge_poster, 0.12);
+
+        let tiny = thumbnail_scale_for_page(100.0, 100.0);
+        assert_eq!(tiny, 0.5);
     }
 }
